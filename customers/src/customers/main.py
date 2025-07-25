@@ -1,5 +1,8 @@
 from common import document, Document
 from uuid import uuid4
+
+
+
 @document
 class Bar(Document):
     name:str
