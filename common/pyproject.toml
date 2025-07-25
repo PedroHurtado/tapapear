@@ -1,0 +1,20 @@
+[project]
+name = "common"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Pedro Hurtado",email = "pedrohurt@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "firebase-admin (>=7.0.0,<8.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "common", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
