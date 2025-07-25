@@ -51,6 +51,7 @@ class Customer(BaseEntity):
         cvc: int,
         tax_type: TaxType,
         tax_number: str,
+        status:ClientStatus
     ):
         super().__init__(id)
         self._name = name
@@ -61,7 +62,8 @@ class Customer(BaseEntity):
         self._cvc = cvc
         self._tax_type = tax_type
         self._tax_numbrer = tax_number
-        self._status = ClientStatus.ACTIVE
+        self._status = status
+        
 
     def update_credit_card(self, card: str, expiration_card: date, cvc: int) -> None:
         self._card = card
@@ -105,6 +107,7 @@ class Customer(BaseEntity):
             cvc=cvc,
             tax_type=tax_type,
             tax_number=tax_number,
+            status=ClientStatus.ACTIVE
         )
 
     @property
