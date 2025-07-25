@@ -1,4 +1,4 @@
-from common import document, Document
+from common.infraestructure import document, Document
 from uuid import uuid4
 @document
 class Bar(Document):
