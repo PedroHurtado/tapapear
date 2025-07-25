@@ -1,6 +1,5 @@
-from . import infraestructure
 
-from .infraestructure import(
+from .document import (
     document,
     Id,
     Collection,
@@ -8,10 +7,9 @@ from .infraestructure import(
     Document
 )
 __all__ = [
-    'infraestructure',
     'document',
     'Id',
-    'Collection', 
+    'Collection',
     'Reference',
     'Document'
 ]
