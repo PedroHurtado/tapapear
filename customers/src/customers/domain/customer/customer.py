@@ -3,9 +3,11 @@ from datetime import date
 from common.domain import BaseEntity
 from enum import Enum
 
+
 class ClientStatus(Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
+
 
 class TaxType(BaseEntity):
     def __init__(self, id, description: str):
@@ -35,6 +37,8 @@ Si de un inferior pasa a un superior se cargará la parte proporcial del mes
 En el caso de desactivar la suscripción no se abonará nada?
 
 """
+
+
 class Customer(BaseEntity):
     def __init__(
         self,
@@ -72,8 +76,10 @@ class Customer(BaseEntity):
         self._addres = address
         self._tax_type = tax_type
         self._tax_numbrer = tax_number
+
     def activate(self):
         self._status = ClientStatus.ACTIVE
+
     def deactivate(self):
         self._status = ClientStatus.INACTIVE
 
@@ -128,7 +134,7 @@ class Customer(BaseEntity):
     @property
     def tax_number(self) -> str:
         return self._tax_numbrer
-    @property
-    def status(self)->ClientStatus:
-        return self._status
 
+    @property
+    def status(self) -> ClientStatus:
+        return self._status
