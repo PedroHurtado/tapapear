@@ -1,5 +1,5 @@
 from . import infraestructure
-
+from . import domain
 from .infraestructure import(
     document,
     Id,
@@ -7,11 +7,17 @@ from .infraestructure import(
     Reference,
     Document
 )
+from .domain import(
+    BaseEntity
+)
+
 __all__ = [
     'infraestructure',
     'document',
     'Id',
     'Collection', 
     'Reference',
-    'Document'
+    'Document',
+    'domain',
+    'BaseEntity'
 ]
