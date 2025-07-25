@@ -13,6 +13,24 @@ class TaxType(BaseEntity):
         return self._description
 
 
+"""
+TODO: Controlar el estado del cliente por si se quierde dar de baja
+Esto implica cambiar su estado a inactivo y podría reactivar la suscription
+cuando quiera pasando a activar su estado y se volvería a facturar con las condiciones
+del plan.
+Crear una entidad de plan que se agregará del objeto session y nunca desde la 
+interfaz grafica al crear, cuando se modifica podrá cambiar el plan si lo 
+desea, facturando en el proximo periodo lo correspondiente al nuevo plan
+
+El sistema debe de abonar si pasa a un plan inferior y ha pagado todo el año
+empezará a contar desde el proximo mes.
+
+Si de un inferior pasa a un superior se cargará la parte proporcial del mes
++ lo que le falte para el resto de año.
+
+En el caso de desactivar la suscripción no se abonará nada?
+
+"""
 class Customer(BaseEntity):
     def __init__(
         self,
