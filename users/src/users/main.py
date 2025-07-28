@@ -1,4 +1,4 @@
-from common.infraestructure import document, Document
+from common.infraestructure import document, Document, initialize_database
 from uuid import uuid4
 @document
 class Bar(Document):
@@ -7,3 +7,4 @@ class Bar(Document):
 bar = Bar(uuid4(),"Pedro")
 bars = set([bar])
 print(bars)
+initialize_database("tapapear.json")

@@ -5,7 +5,10 @@ from .infraestructure import(
     Id,
     Collection,
     Reference,
-    Document
+    Document,
+    initialize_database,
+    transactional
+
 )
 from .domain import(
     BaseEntity
@@ -20,4 +23,6 @@ __all__ = [
     'Document',
     'domain',
     'BaseEntity'
+    'initialize_database',
+    'transactional'
 ]

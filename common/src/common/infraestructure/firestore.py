@@ -1,0 +1,369 @@
+import os
+import functools
+import logging
+import asyncio
+import traceback
+import uuid
+from contextvars import ContextVar
+from google.cloud import firestore
+from google.cloud.firestore import AsyncClient, AsyncTransaction
+from google.oauth2.service_account import Credentials
+from typing import (
+    Any,
+    Callable,
+    TypeVar,
+    ParamSpec,
+    Optional,
+    get_origin,
+    get_args,
+    Union,
+    Type,
+    Generic,
+)
+from abc import ABC, abstractmethod
+from .document import Document
+from dataclasses import fields, is_dataclass
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Types para mejor tipado
+P = ParamSpec("P")
+T = TypeVar("T", bound=Document)
+
+
+db: AsyncClient = None
+
+
+def initialize_database(
+    credentials_path: str,
+    database: str = "(default)",
+):
+    global db
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+    cred = Credentials.from_service_account_file(credentials_path)
+    db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
+
+
+def get_db() -> AsyncClient:
+    if db is None:
+        raise RuntimeError("DB no inicializada")
+    return db
+
+
+# Context variable para almacenar la transacción actual
+_current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
+    "current_transaction", default=None
+)
+
+
+class TransactionManager:
+    """Gestor de transacciones para Firestore - completamente transparente"""
+
+    def __init__(self, db: firestore.AsyncClient):
+        self.db = db
+
+    async def execute_in_transaction(self, func: Callable, *args, **kwargs):
+        """Ejecuta una función dentro de una transacción de forma transparente"""
+
+        async def transaction_func(transaction: AsyncTransaction):
+            # Establecer la transacción en el contexto
+            token = _current_transaction.set(transaction)
+            try:
+                # Ejecutar la función original sin modificar sus parámetros
+                if asyncio.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                else:
+                    return func(*args, **kwargs)
+            finally:
+                # Limpiar el contexto
+                _current_transaction.reset(token)
+
+        try:
+            logger.info("🔄 Iniciando transacción Firestore")
+            result = await self.db.run_transaction(transaction_func)
+            logger.info("✅ Transacción completada exitosamente")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Error en transacción: {str(e)}")
+            logger.debug(f"Traceback completo: {traceback.format_exc()}")
+            raise
+
+
+# Instancia global del gestor
+transaction_manager: Optional[TransactionManager] = None
+
+
+def init_firestore_transactions(db: firestore.AsyncClient):
+    """Inicializar el sistema de transacciones"""
+    global transaction_manager
+    transaction_manager = TransactionManager(db)
+
+
+def get_current_transaction() -> Optional[AsyncTransaction]:
+    """Obtiene la transacción actual del contexto"""
+    return _current_transaction.get()
+
+
+def transactional(func: Callable[P, T]) -> Callable[P, T]:
+    """
+    Decorador que ejecuta el método dentro de una transacción Firestore.
+
+    El método decorado se ejecuta normalmente, sin necesidad de manejar
+    transacciones explícitamente. Los repositories automáticamente usan
+    la transacción activa.
+
+    Usage:
+        @transactional
+        async def create_user(self, user_data: dict):
+            # Tu código normal aquí, sin try/except ni manejo de transacciones
+            await self.external_service.validate(user_data)
+            user = await self.user_repository.create(user_data)
+            await self.audit_repository.log_creation(user.id)
+            return user
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        if transaction_manager is None:
+            raise RuntimeError(
+                "Sistema de transacciones no inicializado. "
+                "Llama a init_firestore_transactions(db) en el startup de tu app"
+            )
+
+        # Si ya estamos en una transacción, ejecutar directamente
+        if get_current_transaction() is not None:
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+        # Ejecutar en nueva transacción
+        return await transaction_manager.execute_in_transaction(func, *args, **kwargs)
+
+    return wrapper
+
+
+
+def resolve_real_type(annotated_type):
+    """
+    Si el tipo es Optional[Collection[T]], devuelve (collection_type, T).
+    Si el tipo es Collection[T], devuelve (collection_type, T).
+    """
+    origin = get_origin(annotated_type)
+    args = get_args(annotated_type)
+
+    # Caso: Optional[Set[T]] → Union[Set[T], None]
+    if origin is Union and type(None) in args:
+        actual_type = [a for a in args if a is not type(None)][0]
+        return resolve_real_type(actual_type)
+
+    # Caso: Set[T], List[T], etc.
+    if origin in (list, set, tuple) and args:
+        return origin, args[0]
+
+    return None, None
+
+
+def to_dict(obj: T, db: AsyncClient = None) -> dict:
+    result = {}
+    for f in fields(obj):
+        value = getattr(obj, f.name)
+        meta = f.metadata
+
+        # ID (posiblemente UUID)
+        if meta.get("id"):
+            result[f.name] = str(value) if isinstance(value, uuid.UUID) else value
+
+        # Subcolecciones (List[Doc])
+        elif "subcollection" in meta:
+            if value is None:
+                result[f.name] = None
+            else:
+                collection_type, _ = resolve_real_type(f.type)
+                if collection_type:
+                    result[f.name] = [to_dict(item, db=db) for item in value]
+                else:
+                    raise TypeError(f"Unsupported collection type for field '{f.name}'")
+
+        # Referencias a otros documentos
+        elif meta.get("reference"):
+            if value is None:
+                result[f.name] = None
+            else:
+                ref_id = getattr(value, "id", None)
+                if not ref_id:
+                    raise ValueError(
+                        f"La referencia en '{f.name}' no tiene 'id' definido"
+                    )
+                if not db:
+                    raise ValueError(
+                        "El parámetro 'db' (Firestore client) es necesario para serializar referencias"
+                    )
+                collection = (
+                    value.__class__.__name__.lower() + "s"
+                )  # simple pluralization
+                result[f.name] = db.collection(collection).document(str(ref_id))
+
+        # Resto de campos normales
+        else:
+            result[f.name] = value
+
+    return result
+
+
+def from_dict(cls: Type[T], data: dict)->Type[T]:
+
+    if not is_dataclass(cls):
+        raise TypeError(f"{cls} is not a dataclass")
+    
+    if not issubclass(cls, Document):
+        raise TypeError(f"{cls} is not a Document")
+
+    kwargs = {}
+    for f in fields(cls):
+        value = data.get(f.name)
+        meta = f.metadata
+
+        if meta.get("id"):
+            kwargs[f.name] = uuid.UUID(value) if isinstance(value, str) else value
+
+        elif "subcollection" in meta:
+            if value is None:
+                kwargs[f.name] = None
+            else:
+                collection_type, item_type = resolve_real_type(f.type)
+                if collection_type:
+                    kwargs[f.name] = collection_type(
+                        from_dict(item_type, item) for item in value
+                    )
+                else:
+                    raise TypeError(f"Unsupported collection type for field '{f.name}'")
+
+        elif meta.get("reference"):
+            if value is None:
+                kwargs[f.name] = None
+            else:
+                # value es DocumentReference
+                doc_snapshot = value.get()
+                doc_data = doc_snapshot.to_dict()
+                ref_cls = f.type
+                # Solo nivel 1: inyectar también el ID
+                doc_data["id"] = doc_snapshot.id
+                kwargs[f.name] = ref_cls(**doc_data)
+
+        else:
+            kwargs[f.name] = value
+
+    return cls(**kwargs)
+
+
+class IRepository(ABC,Generic[T]):
+    """Interfaz base para repositories que soportan transacciones"""
+
+    @abstractmethod
+    async def create(self, document: T) -> None:
+        pass
+
+    @abstractmethod
+    async def get(self, id: uuid) -> Optional[T]:
+        pass
+
+    @abstractmethod
+    async def update(self, document: T) -> None:
+        pass
+
+    @abstractmethod
+    async def delete(self, document: T) -> None:
+        pass
+
+
+class Repository(IRepository, Generic[T]):
+    """Repository base que maneja automáticamente las transacciones"""
+
+    def __init__(
+        self, cls: Type[T], collection_name: str, db: Optional[AsyncClient] = None
+    ):
+
+        self._collection_name = collection_name
+        self._cls = cls
+        self._db = db or get_db()
+
+    def _get_collection(self):
+        return self._db.collection(self._collection_name)
+
+    async def create(self, document: T) -> None:
+
+        transaction = get_current_transaction()
+        
+        doc_ref = self._get_collection().document(document.id)
+
+        data_with_meta = to_dict(document, self.db)
+
+        if transaction:
+            transaction.create(doc_ref, data_with_meta)
+        else:
+            await doc_ref.create(data_with_meta)
+
+        logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
+
+    async def get(self, id: str) -> Optional[T]:
+
+        transaction = get_current_transaction()
+        doc_ref = self._get_collection_ref().document(id)
+
+        if transaction:
+            doc_snapshot = await transaction.get(doc_ref)
+        else:
+            doc_snapshot = await doc_ref.get()
+
+        if doc_snapshot.exists:
+            return from_dict(self._cls, doc_snapshot.to_dict())
+        return None
+
+    async def update(self, document: T) -> None:
+
+        transaction = get_current_transaction()
+        doc_ref = self._get_collection_ref().documen(document.id)
+
+        update_data = to_dict(document, self._db)
+
+        if transaction:
+
+            transaction.update(doc_ref, update_data)
+        else:
+            # Operación directa
+            await doc_ref.update(update_data)
+
+        logger.debug(
+            f"📝 Documento actualizado en {self.collection_name}: {document.id}"
+        )
+
+    async def delete(self, doc: T) -> None:
+        """Elimina un documento"""
+        transaction = get_current_transaction()
+        doc_ref = self._get_collection_ref().document(doc.id)
+
+        if transaction:
+            # Usar transacción
+            transaction.delete(doc_ref)
+        else:
+            # Operación directa
+            await doc_ref.delete()
+
+        logger.debug(f"🗑️ Documento eliminado de {self.collection_name}: {doc.id}")
+
+    async def find_by_field(
+        self, field: str, value: Any, limit: Optional[int] = None
+    ) -> list[T]:
+
+        query = self._get_collection_ref().where(field, "==", value)
+
+        if limit:
+            query = query.limit(limit)
+
+        # Las consultas no se pueden hacer dentro de transacciones en Firestore
+        # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
+        docs = await query.stream()
+        return [from_dict(self._cls, doc.to_dict()) async for doc in docs]
+

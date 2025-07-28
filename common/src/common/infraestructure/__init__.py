@@ -6,10 +6,20 @@ from .document import (
     Reference,
     Document
 )
+from .firestore import(
+    initialize_database,
+    transactional,
+    IRepository,
+    Repository    
+)
 __all__ = [
     'document',
     'Id',
     'Collection',
     'Reference',
-    'Document'
+    'Document',
+    'initialize_database',
+    'transactional',
+    'IRepository',
+    'Repository'
 ]
