@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from google.cloud import firestore
 from google.cloud.firestore import AsyncClient, AsyncTransaction
 from google.oauth2.service_account import Credentials
+from .documentnotfound import DocumentNotFound
 from typing import (
     Any,
     Callable,
@@ -207,7 +208,11 @@ def to_dict(obj: T, db: AsyncClient = None) -> dict:
 
         # Resto de campos normales
         else:
-            result[f.name] = value
+            # 🚀 Aquí: conversión general de UUIDs
+            if isinstance(value, uuid.UUID):
+                result[f.name] = str(value)
+            else:
+                result[f.name] = value
 
     return result
 
@@ -253,32 +258,20 @@ def from_dict(cls: Type[T], data: dict)->Type[T]:
                 kwargs[f.name] = ref_cls(**doc_data)
 
         else:
-            kwargs[f.name] = value
+            # 🚀 Conversión automática de UUIDs si el tipo declarado es uuid.UUID
+            if isinstance(value, str) and f.type is uuid.UUID:
+                kwargs[f.name] = uuid.UUID(value)
+            else:
+                kwargs[f.name] = value
+
 
     return cls(**kwargs)
 
 
-class IRepository(ABC,Generic[T]):
-    """Interfaz base para repositories que soportan transacciones"""
-
-    @abstractmethod
-    async def create(self, document: T) -> None:
-        pass
-
-    @abstractmethod
-    async def get(self, id: uuid) -> Optional[T]:
-        pass
-
-    @abstractmethod
-    async def update(self, document: T) -> None:
-        pass
-
-    @abstractmethod
-    async def delete(self, document: T) -> None:
-        pass
 
 
-class Repository(IRepository, Generic[T]):
+
+class Repository(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
     def __init__(
@@ -292,7 +285,7 @@ class Repository(IRepository, Generic[T]):
     def _get_collection(self):
         return self._db.collection(self._collection_name)
 
-    async def _create(self, document: T) -> None:
+    async def create(self, document: T) -> None:
 
         transaction = get_current_transaction()
         
@@ -307,7 +300,7 @@ class Repository(IRepository, Generic[T]):
 
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
-    async def _get(self, id: str) -> Optional[T]:
+    async def get(self, id: str, message:str=None) -> T:
 
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().document(id)
@@ -319,9 +312,11 @@ class Repository(IRepository, Generic[T]):
 
         if doc_snapshot.exists:
             return from_dict(self._cls, doc_snapshot.to_dict())
-        return None
+        
+        raise DocumentNotFound(id, self._cls.__name__, message)
+        
 
-    async def _update(self, document: T) -> None:
+    async def update(self, document: T) -> None:
 
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().documen(document.id)
@@ -339,7 +334,7 @@ class Repository(IRepository, Generic[T]):
             f"📝 Documento actualizado en {self.collection_name}: {document.id}"
         )
 
-    async def _delete(self, doc: T) -> None:
+    async def delete(self, doc: T) -> None:
         """Elimina un documento"""
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().document(doc.id)
@@ -353,7 +348,7 @@ class Repository(IRepository, Generic[T]):
 
         logger.debug(f"🗑️ Documento eliminado de {self.collection_name}: {doc.id}")
 
-    async def _find_by_field(
+    async def find_by_field(
         self, field: str, value: Any, limit: Optional[int] = None
     ) -> list[T]:
 

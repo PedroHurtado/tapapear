@@ -7,7 +7,9 @@ from .infraestructure import(
     Reference,
     Document,
     initialize_database,
-    transactional
+    transactional,
+    Repository,
+    DocumentNotFound
 
 )
 from .domain import(
@@ -24,5 +26,7 @@ __all__ = [
     'domain',
     'BaseEntity'
     'initialize_database',
-    'transactional'
+    'transactional',
+    'Repository',
+    'DocumentNotFound'
 ]

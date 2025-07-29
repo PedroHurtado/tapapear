@@ -1,5 +1,21 @@
+import uuid
+from uuid import UUID
+from common.infraestructure.document import(
+    Document, document, Id
+)
+
+@document
+class Foo(Document):
+    id:UUID=Id()
+    client_id:UUID
+
+
+from uuid import UUID
 import inspect
-import asyncio
+
+
+
+
 from typing import (
     Callable,
     Protocol,
@@ -24,11 +40,11 @@ def invoke(name: Optional[str] = None) -> Any:
 
 
 @runtime_checkable
-class RepositoryProtocol(Protocol):
-    def _create(self, name: str) -> None: ...
-    def _get(self, name: str) -> None: ...
-    def _update(self, name: str) -> None: ...
-    def _remove(self, name: str) -> None: ...
+class RepositoryProtocol(Protocol, Generic[T]):
+    def create(self, entity: T) -> None: ...
+    def get(self, id: UUID) -> T: ...
+    def update(self, entity: T) -> None: ...
+    def remove(self, entity:T) -> None: ...
 
 
 class RepoMeta(type):
@@ -38,7 +54,7 @@ class RepoMeta(type):
         # Detecta atributos que son Delegate
         for attr_name, value in dct.items():
             if isinstance(value, Delegate):
-                protected = value.name or f"_{attr_name}"
+                protected = value.name or attr_name
                 delegate_attrs[attr_name] = protected
 
         # Para cada atributo delegado, genera método si no está sobreescrito
@@ -98,25 +114,42 @@ class RepoMeta(type):
 
 
 # Interfaces delegadas
-class Add(metaclass=RepoMeta):
-    create: Callable[[str], None] = invoke()
-    create_async: Callable[[str], Awaitable[None]] = invoke()
+
+class Add(Generic[T], metaclass=RepoMeta):
+    create: Callable[[T], None] = invoke()
+    """create(entity: T) -> None"""
+    
+    create_async: Callable[[T], Awaitable[None]] = invoke()
+    """create_async(entity: T) -> Awaitable[None]"""
 
 
-class Get(metaclass=RepoMeta):
-    get: Callable[[str], None] = invoke()
+class Get(Generic[T], metaclass=RepoMeta):
+    get: Callable[[UUID, Optional[str]], T] = invoke()
+    """get(id: UUID, message: Optional[str] = None) -> T"""
+    
+    get_async: Callable[[UUID, Optional[str]], Awaitable[T]] = invoke()
+    """get_async(id: UUID, message: Optional[str] = None) -> Awaitable[T]"""
 
 
-class Update(Get, metaclass=RepoMeta):
-    update: Callable[[str], None] = invoke()
+class Update(Generic[T], Get[T], metaclass=RepoMeta):
+    update: Callable[[T], None] = invoke()
+    """update(entity: T) -> None"""
+    
+    update_async: Callable[[T], Awaitable[None]] = invoke()
+    """update_async(entity: T) -> Awaitable[None]"""
 
 
-class Remove(Get, metaclass=RepoMeta):
-    remove: Callable[[str], None] = invoke()
+class Remove(Generic[T], Get[T], metaclass=RepoMeta):
+    remove: Callable[[T], None] = invoke()
+    """remove(entity: T) -> None"""
+    
+    remove_async: Callable[[T], Awaitable[None]] = invoke()
+    """remove_async(entity: T) -> Awaitable[None]"""
+
 
 
 # Esta clase NO debe tener metaclass, para que __init__ sea visible
-class InjectsRepo:
+class InjectsRepo():
     def __init__(self, repo: RepositoryProtocol):
         if not isinstance(repo, RepositoryProtocol):
             raise TypeError(f"{repo!r} does not implement RepositoryProtocol")
@@ -124,71 +157,12 @@ class InjectsRepo:
 
 
 # Composición de interfaces
-class IRepo(Add, Update, Remove, metaclass=RepoMeta):
+class IRepo(Generic[T],Add[T], Update[T], Remove[T], metaclass=RepoMeta):
     pass
-
 
 # Repo concreto
-class BarRepo(InjectsRepo, IRepo):
+class BarRepo(InjectsRepo, IRepo[Foo]):
     pass
 
 
-# Implementación concreta (sync)
-class RepoBase:
-    def _create(self, name: str):
-        print(f"[CREATE] {name}")
 
-    def _get(self, name: str):
-        print(f"[GET] {name}")
-
-    def _update(self, name: str):
-        print(f"[UPDATE] {name}")
-
-    def _remove(self, name: str):
-        print(f"[REMOVE] {name}")    
-    
-
-# Implementación concreta (async)
-class AsyncRepoBase:
-    async def _create(self, name: str):
-        print(f"[ASYNC CREATE] {name}")
-
-    async def _get(self, name: str):
-        print(f"[ASYNC GET] {name}")
-
-    async def _update(self, name: str):
-        print(f"[ASYNC UPDATE] {name}")
-
-    async def _remove(self, name: str):
-        print(f"[ASYNC REMOVE] {name}")
-
-
-
-
-# 🔍 Ejemplo de uso
-if __name__ == "__main__":
-    print("=== OPERACIONES SÍNCRONAS ===")
-    barrepo = BarRepo(RepoBase())
-    barrepo.create("Pedro")    
-    barrepo.get("Pedro")
-    barrepo.update("Pedro actualizado")
-    barrepo.remove("Pedro borrado")    
-
-    print("\n=== OPERACIONES ASÍNCRONAS ===")
-
-    async def test_async():
-        async_repo = BarRepo(AsyncRepoBase())
-        await async_repo.create_async("Pedro Async")
-        await async_repo.get_async("Pedro Async")
-        await async_repo.update_async("Pedro Async actualizado")
-        await async_repo.remove_async("Pedro Async borrado")
-        
-
-    asyncio.run(test_async())
-
-    print("\n=== PROBANDO MEZCLA (ERROR ESPERADO) ===")
-    mixed_repo = BarRepo(AsyncRepoBase())
-    try:
-        mixed_repo.create("Esto debería fallar")
-    except RuntimeError as e:
-        print(f"Error esperado: {e}")
