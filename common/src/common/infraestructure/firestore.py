@@ -292,7 +292,7 @@ class Repository(IRepository, Generic[T]):
     def _get_collection(self):
         return self._db.collection(self._collection_name)
 
-    async def create(self, document: T) -> None:
+    async def _create(self, document: T) -> None:
 
         transaction = get_current_transaction()
         
@@ -307,7 +307,7 @@ class Repository(IRepository, Generic[T]):
 
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
-    async def get(self, id: str) -> Optional[T]:
+    async def _get(self, id: str) -> Optional[T]:
 
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().document(id)
@@ -321,7 +321,7 @@ class Repository(IRepository, Generic[T]):
             return from_dict(self._cls, doc_snapshot.to_dict())
         return None
 
-    async def update(self, document: T) -> None:
+    async def _update(self, document: T) -> None:
 
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().documen(document.id)
@@ -339,7 +339,7 @@ class Repository(IRepository, Generic[T]):
             f"📝 Documento actualizado en {self.collection_name}: {document.id}"
         )
 
-    async def delete(self, doc: T) -> None:
+    async def _delete(self, doc: T) -> None:
         """Elimina un documento"""
         transaction = get_current_transaction()
         doc_ref = self._get_collection_ref().document(doc.id)
@@ -353,7 +353,7 @@ class Repository(IRepository, Generic[T]):
 
         logger.debug(f"🗑️ Documento eliminado de {self.collection_name}: {doc.id}")
 
-    async def find_by_field(
+    async def _find_by_field(
         self, field: str, value: Any, limit: Optional[int] = None
     ) -> list[T]:
 

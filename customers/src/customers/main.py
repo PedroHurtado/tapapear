@@ -100,6 +100,7 @@ class RepoMeta(type):
 # Interfaces delegadas
 class Add(metaclass=RepoMeta):
     create: Callable[[str], None] = invoke()
+    create_async: Callable[[str], Awaitable[None]] = invoke()
 
 
 class Get(metaclass=RepoMeta):
@@ -117,6 +118,8 @@ class Remove(Get, metaclass=RepoMeta):
 # Esta clase NO debe tener metaclass, para que __init__ sea visible
 class InjectsRepo:
     def __init__(self, repo: RepositoryProtocol):
+        if not isinstance(repo, RepositoryProtocol):
+            raise TypeError(f"{repo!r} does not implement RepositoryProtocol")
         self._repo = repo
 
 
@@ -142,8 +145,8 @@ class RepoBase:
         print(f"[UPDATE] {name}")
 
     def _remove(self, name: str):
-        print(f"[REMOVE] {name}")
-
+        print(f"[REMOVE] {name}")    
+    
 
 # Implementación concreta (async)
 class AsyncRepoBase:
@@ -160,33 +163,16 @@ class AsyncRepoBase:
         print(f"[ASYNC REMOVE] {name}")
 
 
-# Función para manejar tanto sync como async
-async def run_operations():
-    print("=== OPERACIONES SÍNCRONAS ===")
-    # Repo síncrono
-    sync_repo = BarRepo(RepoBase())
-    sync_repo.create("Pedro")
-    sync_repo.get("Pedro")
-    sync_repo.update("Pedro actualizado")
-    sync_repo.remove("Pedro borrado")
-
-    print("\n=== OPERACIONES ASÍNCRONAS ===")
-    # Repo asíncrono
-    async_repo = BarRepo(AsyncRepoBase())
-    await async_repo.create("Pedro Async")
-    await async_repo.get("Pedro Async")
-    await async_repo.update("Pedro Async actualizado")
-    await async_repo.remove("Pedro Async borrado")
 
 
 # 🔍 Ejemplo de uso
 if __name__ == "__main__":
     print("=== OPERACIONES SÍNCRONAS ===")
     barrepo = BarRepo(RepoBase())
-    barrepo.create("Pedro")
+    barrepo.create("Pedro")    
     barrepo.get("Pedro")
     barrepo.update("Pedro actualizado")
-    barrepo.remove("Pedro borrado")
+    barrepo.remove("Pedro borrado")    
 
     print("\n=== OPERACIONES ASÍNCRONAS ===")
 
@@ -196,6 +182,7 @@ if __name__ == "__main__":
         await async_repo.get_async("Pedro Async")
         await async_repo.update_async("Pedro Async actualizado")
         await async_repo.remove_async("Pedro Async borrado")
+        
 
     asyncio.run(test_async())
 
