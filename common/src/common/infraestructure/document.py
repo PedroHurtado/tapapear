@@ -1,4 +1,4 @@
-import uuid;
+from uuid import UUID
 from dataclasses import dataclass,field
 
 def document(cls=None, *, kw_only=False):
@@ -22,7 +22,7 @@ def Reference(allow_none: bool = False):
 
 @dataclass
 class Document:
-    id:uuid = Id()
+    id:UUID = Id()
     def __eq__(self, value):
         return isinstance(value,Document) and value.id == self.id
     def __hash__(self):
