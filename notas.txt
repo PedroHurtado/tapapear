@@ -1,0 +1,18 @@
+1. Que pasa cuando se inyectan dos repositorios 
+
+uno para la entidad principal y otro para la entidad secundaria
+
+y el atributo permite null y hay que validarlo si es direferente a null
+
+tal y como está el código falla
+
+2. Crear la infraestructura para hacer map con Automapper
+
+https://pypi.org/project/py-automapper/
+
+3. Ver la mejor manera de los campos de indice unico, donde meterlos.
+
+4. Estudiar si se puede utilizar pydantic para las Documentos
+y ahorrarnos toda la implementación que hay en el repo de firestore
+
+Es decir crear Id,Reference y Collection para paydantic y que el solo se encargue
