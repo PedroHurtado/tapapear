@@ -12,7 +12,7 @@ https://pypi.org/project/py-automapper/
 
 3. Ver la mejor manera de los campos de indice unico, donde meterlos.
 
-4. Estudiar si se puede utilizar pydantic para las Documentos
-y ahorrarnos toda la implementación que hay en el repo de firestore
+4(X). Estudiar si se puede utilizar pydantic para las Documentos
+y ahorrarnos toda la implementación que hay en el repo de firestore(X)
 
 Es decir crear Id,Reference y Collection para paydantic y que el solo se encargue
