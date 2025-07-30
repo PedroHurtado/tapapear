@@ -20,6 +20,9 @@ class Foo(Document):...
 id= uuid.uuid4()
 foo = Foo(id=id)
 foo1 = Foo(id=id)
+for name, field in foo1:
+    print(name)
+    print(field)
 list = set()
 list.add(foo)   
 list.add(foo1)

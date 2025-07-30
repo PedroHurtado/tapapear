@@ -4,6 +4,7 @@ import logging
 import asyncio
 import traceback
 import uuid
+from uuid import UUID
 from contextvars import ContextVar
 from google.cloud import firestore
 from google.cloud.firestore import AsyncClient, AsyncTransaction
@@ -165,68 +166,66 @@ def resolve_real_type(annotated_type):
 
     return None, None
 
+def _resolve_inner_type(tp):
+    origin = get_origin(tp)  # obtiene la "clase base" genérica, ej. list o set
+    if origin in (list, set):
+        args = get_args(tp)  # obtiene los parámetros genéricos, ej. [Comment] o [Tag]
+        if args:
+            return args[0]  # devuelve el tipo interno (el primer parámetro genérico)
+    return None  # si no es list o set o no tiene parámetros, devuelve None
 
 def to_dict(obj: T, db: AsyncClient = None) -> dict:
     result = {}
-    for f in fields(obj):
-        value = getattr(obj, f.name)
-        meta = f.metadata
+    for name, field in obj:
+        value = getattr(obj, name)
+        meta = field.metadata
 
         # ID (posiblemente UUID)
         if meta.get("id"):
-            result[f.name] = str(value) if isinstance(value, uuid.UUID) else value
+            result[name] = str(value) if isinstance(value, UUID) else value
 
-        # Subcolecciones (List[Doc])
+        # Subcolecciones (List[Document] o Set[Document])
         elif "subcollection" in meta:
             if value is None:
-                result[f.name] = None
+                result[name] = None
             else:
-                collection_type, _ = resolve_real_type(f.type)
-                if collection_type:
-                    result[f.name] = [to_dict(item, db=db) for item in value]
+                inner_type = _resolve_inner_type(field.annotation)
+                if inner_type:
+                    result[name] = [to_dict(item, db=db) for item in value]
                 else:
-                    raise TypeError(f"Unsupported collection type for field '{f.name}'")
+                    raise TypeError(f"Unsupported collection type for field '{name}'")
 
         # Referencias a otros documentos
         elif meta.get("reference"):
             if value is None:
-                result[f.name] = None
+                result[name] = None
             else:
                 ref_id = getattr(value, "id", None)
                 if not ref_id:
-                    raise ValueError(
-                        f"La referencia en '{f.name}' no tiene 'id' definido"
-                    )
+                    raise ValueError(f"La referencia en '{name}' no tiene 'id' definido")
                 if not db:
-                    raise ValueError(
-                        "El parámetro 'db' (Firestore client) es necesario para serializar referencias"
-                    )
-                collection = (
-                    value.__class__.__name__.lower() + "s"
-                )  # simple pluralization
-                result[f.name] = db.collection(collection).document(str(ref_id))
+                    raise ValueError("El parámetro 'db' (Firestore client) es necesario para serializar referencias")
+                collection = meta.get("reference") or name  # usar valor explícito o nombre del campo
+                result[name] = db.collection(collection).document(str(ref_id))
 
         # Resto de campos normales
         else:
-            # 🚀 Aquí: conversión general de UUIDs
-            if isinstance(value, uuid.UUID):
-                result[f.name] = str(value)
-            else:
-                result[f.name] = value
+            result[name] = str(value) if isinstance(value, UUID) else value
 
     return result
 
 
-def from_dict(cls: Type[T], data: dict)->Type[T]:
 
-    if not is_dataclass(cls):
-        raise TypeError(f"{cls} is not a dataclass")
+
+
+
+def from_dict(cls: Type[T], data: dict)->T:    
     
     if not issubclass(cls, Document):
         raise TypeError(f"{cls} is not a Document")
 
     kwargs = {}
-    for f in fields(cls):
+    for f in cls.model_fields:
         value = data.get(f.name)
         meta = f.metadata
 
@@ -289,7 +288,7 @@ class Repository(Generic[T]):
 
         transaction = get_current_transaction()
         
-        doc_ref = self._get_collection().document(document.id)
+        doc_ref = self._get_collection().document(str(document.id))
 
         data_with_meta = to_dict(document, self.db)
 
@@ -300,10 +299,10 @@ class Repository(Generic[T]):
 
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
-    async def get(self, id: str, message:str=None) -> T:
+    async def get(self, id: UUID, message:str=None) -> T:
 
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().document(id)
+        doc_ref = self._get_collection_ref().document(str(id))
 
         if transaction:
             doc_snapshot = await transaction.get(doc_ref)
@@ -319,7 +318,7 @@ class Repository(Generic[T]):
     async def update(self, document: T) -> None:
 
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().documen(document.id)
+        doc_ref = self._get_collection_ref().documen(str(document.id))
 
         update_data = to_dict(document, self._db)
 
@@ -337,7 +336,7 @@ class Repository(Generic[T]):
     async def delete(self, doc: T) -> None:
         """Elimina un documento"""
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().document(doc.id)
+        doc_ref = self._get_collection_ref().document(str(doc.id))
 
         if transaction:
             # Usar transacción
@@ -351,8 +350,8 @@ class Repository(Generic[T]):
     async def find_by_field(
         self, field: str, value: Any, limit: Optional[int] = None
     ) -> list[T]:
-
-        query = self._get_collection_ref().where(field, "==", value)
+        _value = str(value) if isinstance(value, UUID) else value
+        query = self._get_collection_ref().where(field, "==", _value)
 
         if limit:
             query = query.limit(limit)
