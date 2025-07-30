@@ -1,21 +1,9 @@
+import inspect
 import uuid
 from uuid import UUID
-from common.infraestructure.document import(
-    Document, document, Id
+from common.infraestructure import(
+    Document
 )
-
-@document
-class Foo(Document):
-    id:UUID=Id()
-    client_id:UUID
-
-
-from uuid import UUID
-import inspect
-
-
-
-
 from typing import (
     Callable,
     Protocol,
@@ -26,6 +14,24 @@ from typing import (
     runtime_checkable,
     Awaitable,
 )
+
+
+class Foo(Document):...    
+id= uuid.uuid4()
+foo = Foo(id=id)
+foo1 = Foo(id=id)
+list = set()
+list.add(foo)   
+list.add(foo1)
+print(len(list))
+
+
+
+
+
+
+
+
 
 T = TypeVar("T")
 

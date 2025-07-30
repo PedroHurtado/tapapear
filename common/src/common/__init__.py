@@ -1,7 +1,6 @@
 from . import infraestructure
 from . import domain
-from .infraestructure import(
-    document,
+from .infraestructure import(    
     Id,
     Collection,
     Reference,
@@ -17,8 +16,7 @@ from .domain import(
 )
 
 __all__ = [
-    'infraestructure',
-    'document',
+    'infraestructure',    
     'Id',
     'Collection', 
     'Reference',

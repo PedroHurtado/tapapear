@@ -1,6 +1,5 @@
 
-from .document import (
-    document,
+from .document import (   
     Id,
     Collection,
     Reference,
@@ -12,8 +11,7 @@ from .firestore import(
     DocumentNotFound,
     Repository    
 )
-__all__ = [
-    'document',
+__all__ = [    
     'Id',
     'Collection',
     'Reference',
