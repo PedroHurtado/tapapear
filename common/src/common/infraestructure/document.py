@@ -39,7 +39,7 @@ class Document(BaseModel):
         model_fields = self.__class__.model_fields
         field_info = model_fields.get(info.field_name)
         
-        if field_info and hasattr(field_info, 'json_schema_extra') and field_info.json_schema_extra:
+        if field_info and getattr(field_info, 'json_schema_extra', None):
             metadata = field_info.json_schema_extra.get('metadata', {})
             if metadata.get("id") is True:
                 return None
@@ -51,8 +51,8 @@ class Document(BaseModel):
     
 
     @model_serializer(mode='wrap')
-    def serialize_model(self, seiralizer: SerializerFunctionWrapHandler):
-        data = seiralizer(self)        
+    def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
+        data = serializer(self)        
        
         # Remover campos con valor None
         return {k: v for k, v in data.items() if v is not None}

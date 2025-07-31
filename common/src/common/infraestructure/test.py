@@ -14,6 +14,6 @@ class Foo(Document):
 
 bar = Bar(id=uuid4(), name="Test")
 foo = Foo(id=uuid4(), bar=bar)  # x omitido
-print(foo)
+print("Document:",foo)
 d = foo.model_dump()
 print("Serializado:", d)
