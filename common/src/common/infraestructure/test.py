@@ -1,0 +1,19 @@
+from common.infraestructure import(
+    Document,
+    Reference
+)
+from uuid import uuid4, UUID
+from typing import Optional
+
+class Bar(Document): 
+    name: str
+
+class Foo(Document):
+    bar: Bar
+    x: Optional[UUID] = None
+
+bar = Bar(id=uuid4(), name="Test")
+foo = Foo(id=uuid4(), bar=bar)  # x omitido
+print(foo)
+d = foo.model_dump()
+print("Serializado:", d)
