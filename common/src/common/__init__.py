@@ -1,10 +1,12 @@
 from . import infraestructure
 from . import domain
+
 from .infraestructure import(    
     Id,
     Collection,
     Reference,
     Document,
+    Embeddable,
     initialize_database,
     transactional,
     Repository,
@@ -12,7 +14,8 @@ from .infraestructure import(
 
 )
 from .domain import(
-    BaseEntity
+    BaseEntity,
+    ValueObject
 )
 
 __all__ = [
@@ -21,10 +24,12 @@ __all__ = [
     'Collection', 
     'Reference',
     'Document',
-    'domain',
-    'BaseEntity'
+    'Embeddable'
     'initialize_database',
     'transactional',
-    'Repository',
+    'Repository',    
+    'domain',
+    'BaseEntity'
+    'ValueObject'    
     'DocumentNotFound'
 ]

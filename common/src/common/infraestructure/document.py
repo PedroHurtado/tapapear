@@ -22,9 +22,15 @@ def Collection(name: str = None, allow_none: bool = False):
 from pydantic import BaseModel
 from typing import Any
 
-
-
-class Document(BaseModel):
+class MixinSerializer(BaseModel):
+    @model_serializer(mode='wrap')
+    def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
+        data = serializer(self)        
+       
+        # Remover campos con valor None
+        return {k: v for k, v in data.items() if v is not None}
+    
+class Document(MixinSerializer):
     id: UUID = Id()
 
     def __eq__(self, value):
@@ -47,17 +53,11 @@ class Document(BaseModel):
         if isinstance(value,UUID):
             return str(value)
         
-        return value
-    
-
-    @model_serializer(mode='wrap')
-    def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
-        data = serializer(self)        
-       
-        # Remover campos con valor None
-        return {k: v for k, v in data.items() if v is not None}
-    
-        
+        return value   
+   
     model_config = ConfigDict(
         frozen=True,    
     )
+        
+    
+class Embeddable(MixinSerializer):...

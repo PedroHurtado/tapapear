@@ -3,7 +3,8 @@ from .document import (
     Id,
     Collection,
     Reference,
-    Document
+    Document,
+    Embeddable
 )
 from .firestore import(
     initialize_database,
@@ -19,5 +20,6 @@ __all__ = [
     'initialize_database',
     'transactional',
     'DocumentNotFound',
-    'Repository'
+    'Repository',
+    'Embeddable'
 ]

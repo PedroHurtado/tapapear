@@ -1,6 +1,10 @@
 from .baseentity import(
-    BaseEntity
+    BaseEntity    
+)
+from .valueobject import(
+    ValueObject
 )
 __all__ = [
     "BaseEntity"
+    "ValueObject"
 ]
