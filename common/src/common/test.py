@@ -10,14 +10,11 @@ from typing import Optional
 
 class Data(ValueObject):
     name:str
-    def _validate(self):...
-data = Data("Pedro")
-data1 = Data("Pedro")
 
-print(data==data1)
-data.name ="pedro hurtado"
-my_set =set()
-my_set.add(data)
+data = Data(name="Pedro")
+        
+
+
 
 class Bar(Document): 
     name: str
