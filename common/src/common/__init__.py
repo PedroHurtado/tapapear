@@ -13,6 +13,7 @@ from .infraestructure import(
     DocumentNotFound
 
 )
+
 from .domain import(
     BaseEntity,
     ValueObject

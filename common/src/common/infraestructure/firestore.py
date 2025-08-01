@@ -7,7 +7,9 @@ import uuid
 from uuid import UUID
 from contextvars import ContextVar
 from google.cloud import firestore
-from google.cloud.firestore import AsyncClient, AsyncTransaction
+from google.cloud.firestore import (
+    AsyncClient, AsyncTransaction, AsyncDocumentReference
+)
 from google.oauth2.service_account import Credentials
 from .documentnotfound import DocumentNotFound
 from typing import (
@@ -24,6 +26,7 @@ from typing import (
 )
 from abc import ABC, abstractmethod
 from .document import Document
+from .firestore_util import get_db
 from dataclasses import fields, is_dataclass
 
 logging.basicConfig(level=logging.INFO)
@@ -32,26 +35,6 @@ logger = logging.getLogger(__name__)
 # Types para mejor tipado
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
-
-
-db: AsyncClient = None
-
-
-def initialize_database(
-    credentials_path: str,
-    database: str = "(default)",
-):
-    global db
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-    cred = Credentials.from_service_account_file(credentials_path)
-    db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
-
-
-def get_db() -> AsyncClient:
-    if db is None:
-        raise RuntimeError("DB no inicializada")
-    return db
-
 
 # Context variable para almacenar la transacción actual
 _current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
@@ -274,21 +257,26 @@ class Repository(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
     def __init__(
-        self, cls: Type[T], collection_name: str, db: Optional[AsyncClient] = None
+        self, cls: Type[T], db: Optional[AsyncClient] = None
     ):
 
-        self._collection_name = collection_name
-        self._cls = cls
+         
+        if not issubclass(cls, Document):
+            raise ValueError(f"La clase {cls.__name__} debe ser una subclase de Document")
+        
+        self._cls = cls        
+        self._collection_name = cls.__name__.lower()
+            
         self._db = db or get_db()
 
-    def _get_collection(self):
+    def __get_collection(self):
         return self._db.collection(self._collection_name)
 
     async def create(self, document: T) -> None:
 
         transaction = get_current_transaction()
         
-        doc_ref = self._get_collection().document(str(document.id))
+        doc_ref = self.__get_collection().document(str(document.id))
 
         data_with_meta = to_dict(document, self.db)
 
@@ -302,7 +290,7 @@ class Repository(Generic[T]):
     async def get(self, id: UUID, message:str=None) -> T:
 
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().document(str(id))
+        doc_ref = self.__get_collection_ref().document(str(id))
 
         if transaction:
             doc_snapshot = await transaction.get(doc_ref)
@@ -318,7 +306,7 @@ class Repository(Generic[T]):
     async def update(self, document: T) -> None:
 
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().documen(str(document.id))
+        doc_ref = self.__get_collection_ref().documen(str(document.id))
 
         update_data = to_dict(document, self._db)
 
@@ -336,7 +324,7 @@ class Repository(Generic[T]):
     async def delete(self, doc: T) -> None:
         """Elimina un documento"""
         transaction = get_current_transaction()
-        doc_ref = self._get_collection_ref().document(str(doc.id))
+        doc_ref = self.__get_collection_ref().document(str(doc.id))
 
         if transaction:
             # Usar transacción
@@ -351,7 +339,7 @@ class Repository(Generic[T]):
         self, field: str, value: Any, limit: Optional[int] = None
     ) -> list[T]:
         _value = str(value) if isinstance(value, UUID) else value
-        query = self._get_collection_ref().where(field, "==", _value)
+        query = self.__get_collection_ref().where(field, "==", _value)
 
         if limit:
             query = query.limit(limit)

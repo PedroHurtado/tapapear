@@ -1,12 +1,16 @@
+
 from common.infraestructure import(
     Document,
-    Reference
+    Reference,
+    initialize_database,
+    transactional    
 )
 from common.domain import(
     ValueObject
 )
 from uuid import uuid4, UUID
 from typing import Optional
+
 
 class Data(ValueObject):
     name:str

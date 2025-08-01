@@ -6,11 +6,13 @@ from .document import (
     Document,
     Embeddable
 )
-from .firestore import(
-    initialize_database,
+from .firestore import(    
     transactional,
     DocumentNotFound,
     Repository    
+)
+from .firestore_util import(
+    initialize_database
 )
 __all__ = [    
     'Id',
