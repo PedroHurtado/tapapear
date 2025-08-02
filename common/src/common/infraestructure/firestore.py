@@ -7,9 +7,7 @@ import uuid
 from uuid import UUID
 from contextvars import ContextVar
 from google.cloud import firestore
-from google.cloud.firestore import (
-    AsyncClient, AsyncTransaction, AsyncDocumentReference
-)
+from google.cloud.firestore import AsyncClient, AsyncTransaction, AsyncDocumentReference
 from google.oauth2.service_account import Credentials
 from .documentnotfound import DocumentNotFound
 from typing import (
@@ -129,7 +127,6 @@ def transactional(func: Callable[P, T]) -> Callable[P, T]:
     return wrapper
 
 
-
 def resolve_real_type(annotated_type):
     """
     Si el tipo es Optional[Collection[T]], devuelve (collection_type, T).
@@ -149,6 +146,7 @@ def resolve_real_type(annotated_type):
 
     return None, None
 
+
 def _resolve_inner_type(tp):
     origin = get_origin(tp)  # obtiene la "clase base" genérica, ej. list o set
     if origin in (list, set):
@@ -156,6 +154,7 @@ def _resolve_inner_type(tp):
         if args:
             return args[0]  # devuelve el tipo interno (el primer parámetro genérico)
     return None  # si no es list o set o no tiene parámetros, devuelve None
+
 
 def to_dict(obj: T, db: AsyncClient = None) -> dict:
     result = {}
@@ -185,10 +184,16 @@ def to_dict(obj: T, db: AsyncClient = None) -> dict:
             else:
                 ref_id = getattr(value, "id", None)
                 if not ref_id:
-                    raise ValueError(f"La referencia en '{name}' no tiene 'id' definido")
+                    raise ValueError(
+                        f"La referencia en '{name}' no tiene 'id' definido"
+                    )
                 if not db:
-                    raise ValueError("El parámetro 'db' (Firestore client) es necesario para serializar referencias")
-                collection = meta.get("reference") or name  # usar valor explícito o nombre del campo
+                    raise ValueError(
+                        "El parámetro 'db' (Firestore client) es necesario para serializar referencias"
+                    )
+                collection = (
+                    meta.get("reference") or name
+                )  # usar valor explícito o nombre del campo
                 result[name] = db.collection(collection).document(str(ref_id))
 
         # Resto de campos normales
@@ -198,12 +203,8 @@ def to_dict(obj: T, db: AsyncClient = None) -> dict:
     return result
 
 
+def from_dict(cls: Type[T], data: dict) -> T:
 
-
-
-
-def from_dict(cls: Type[T], data: dict)->T:    
-    
     if not issubclass(cls, Document):
         raise TypeError(f"{cls} is not a Document")
 
@@ -246,27 +247,20 @@ def from_dict(cls: Type[T], data: dict)->T:
             else:
                 kwargs[f.name] = value
 
-
     return cls(**kwargs)
-
-
-
 
 
 class Repository(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
-    def __init__(
-        self, cls: Type[T], db: Optional[AsyncClient] = None
-    ):
-
-         
+    def __init__(self, cls: Type[T], db: Optional[AsyncClient] = None):
         if not issubclass(cls, Document):
-            raise ValueError(f"La clase {cls.__name__} debe ser una subclase de Document")
-        
-        self._cls = cls        
+            raise ValueError(
+                f"La clase {cls.__name__} debe ser una subclase de Document"
+            )
+
+        self._cls = cls
         self._collection_name = cls.__name__.lower()
-            
         self._db = db or get_db()
 
     def __get_collection(self):
@@ -275,7 +269,7 @@ class Repository(Generic[T]):
     async def create(self, document: T) -> None:
 
         transaction = get_current_transaction()
-        
+
         doc_ref = self.__get_collection().document(str(document.id))
 
         data_with_meta = to_dict(document, self.db)
@@ -287,7 +281,7 @@ class Repository(Generic[T]):
 
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
-    async def get(self, id: UUID, message:str=None) -> T:
+    async def get(self, id: UUID, message: str = None) -> T:
 
         transaction = get_current_transaction()
         doc_ref = self.__get_collection_ref().document(str(id))
@@ -299,9 +293,8 @@ class Repository(Generic[T]):
 
         if doc_snapshot.exists:
             return from_dict(self._cls, doc_snapshot.to_dict())
-        
+
         raise DocumentNotFound(id, self._cls.__name__, message)
-        
 
     async def update(self, document: T) -> None:
 
@@ -348,4 +341,3 @@ class Repository(Generic[T]):
         # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
         docs = await query.stream()
         return [from_dict(self._cls, doc.to_dict()) async for doc in docs]
-
