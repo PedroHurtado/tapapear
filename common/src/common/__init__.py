@@ -23,6 +23,7 @@ from .domain import(
 
 __all__ = [
     'infraestructure',    
+    'domain',
     'Id',
     'Collection', 
     'Reference',
@@ -31,7 +32,6 @@ __all__ = [
     'initialize_database',
     'transactional',
     'Repository',    
-    'domain',
     'BaseEntity'
     'ValueObject'    
     'DocumentNotFound',

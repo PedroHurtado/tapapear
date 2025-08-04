@@ -9,9 +9,7 @@ from .document import (
 from .firestore import(    
     transactional,
     DocumentNotFound,
-    Repository    
-)
-from .firestore_util import(
+    RepositoryFirestore,    
     initialize_database
 )
 __all__ = [    
@@ -22,6 +20,6 @@ __all__ = [
     'initialize_database',
     'transactional',
     'DocumentNotFound',
-    'Repository',
+    'RepositoryFirestore',
     'Embeddable'
 ]

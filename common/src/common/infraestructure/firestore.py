@@ -23,7 +23,6 @@ from typing import (
 )
 from abc import ABC, abstractmethod
 from .document import Document,DocumentReference,MixinSerializer
-from .firestore_util import get_db,get_document
 from dataclasses import fields, is_dataclass
 
 logging.basicConfig(level=logging.INFO)
@@ -32,11 +31,6 @@ logger = logging.getLogger(__name__)
 # Types para mejor tipado
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
-
-# Context variable para almacenar la transacción actual
-_current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
-    "current_transaction", default=None
-)
 
 
 class TransactionManager:
@@ -72,9 +66,29 @@ class TransactionManager:
             raise
 
 
-# Instancia global del gestor
-transaction_manager: Optional[TransactionManager] = None
 
+db: AsyncClient = None
+transaction_manager: Optional[TransactionManager] = None
+_current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
+    "current_transaction", default=None
+)
+
+async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
+    # Extraer collection e id del path
+    path_parts = doc_ref.path.split('/')
+    collection = path_parts[-2]
+    doc_id = path_parts[-1]
+    
+    error = DocumentNotFound(doc_id, collection)
+    return await RepositoryFirestore.__get(doc_ref, error)
+
+def get_db() -> AsyncClient:
+    if db is None:
+        raise RuntimeError("DB no inicializada")
+    return db
+
+def get_document(path:str)->AsyncDocumentReference:
+    return get_db().document(path)
 
 def init_firestore_transactions(db: firestore.AsyncClient):
     """Inicializar el sistema de transacciones"""
@@ -85,6 +99,17 @@ def init_firestore_transactions(db: firestore.AsyncClient):
 def get_current_transaction() -> Optional[AsyncTransaction]:
     """Obtiene la transacción actual del contexto"""
     return _current_transaction.get()
+
+def initialize_database(
+    credentials_path: str,
+    database: str = "(default)",
+):
+    global db
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+    cred = Credentials.from_service_account_file(credentials_path)
+    db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
+    init_firestore_transactions(db)
+
 
 
 def transactional(func: Callable[P, T]) -> Callable[P, T]:
@@ -126,44 +151,31 @@ def transactional(func: Callable[P, T]) -> Callable[P, T]:
     return wrapper
 
 
-
-
 def convert_document_references(data: Any) -> Any:
     """
     Función recursiva que convierte instancias de DocumentReference a AsyncDocumentReference
-    en cualquier parte de la estructura de datos.
-    
-    Args:
-        data: Estructura de datos que puede contener DocumentReference en cualquier nivel
-        
-    Returns:
-        La misma estructura con DocumentReference convertidos a AsyncDocumentReference
+    en cualquier parte de la estructura de datos, usando pattern matching (Python 3.10+).
     """
-    # Caso base: si es una instancia de DocumentReference, convertirla
-    if isinstance(data, DocumentReference):
-        return get_document(data.path)
-    
-    # Si es un diccionario, procesar recursivamente cada valor
-    elif isinstance(data, dict):
-        return {key: convert_document_references(value) for key, value in data.items()}
-    
-    # Si es una lista, procesar recursivamente cada elemento
-    elif isinstance(data, list):
-        return [convert_document_references(item) for item in data]
-    
-    # Si es una tupla, procesar recursivamente y mantener como tupla
-    elif isinstance(data, tuple):
-        return tuple(convert_document_references(item) for item in data)
-    
-    # Si es un set, procesar recursivamente y mantener como set
-    elif isinstance(data, set):
-        return {convert_document_references(item) for item in data}
-    elif isinstance(data, UUID):
-        return str(data)
-    # Para cualquier otro tipo (primitivos como str, int, float, bool, None), devolver tal como está
-    else:
-        return data
+    match data:
+        case DocumentReference():
+            return get_document(data.path)
+        case dict():
+            return {key: convert_document_references(value) for key, value in data.items()}
+        case list():
+            return [convert_document_references(item) for item in data]
+        case tuple():
+            return tuple(convert_document_references(item) for item in data)
+        case set():
+            return {convert_document_references(item) for item in data}
+        case UUID():
+            return str(data)
+        case _:
+            return data
+
   
+
+
+
 
 def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
     """
@@ -177,17 +189,8 @@ def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
         Diccionario con las referencias convertidas
     """
     model_dict = model.model_dump(context={"is_root": True})
-
     return convert_document_references(model_dict)
 
-async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
-    # Extraer collection e id del path
-    path_parts = doc_ref.path.split('/')
-    collection = path_parts[-2]
-    doc_id = path_parts[-1]
-    
-    error = DocumentNotFound(doc_id, collection)
-    return await Repository.__get(doc_ref, error)
 
 async def to_document(
     data: Dict[str, Any], 
@@ -204,29 +207,16 @@ async def to_document(
     Returns:
         Diccionario con las referencias convertidas
     """
-    if isinstance(data, AsyncDocumentReference):
-        return await callback(data)
-    
-    elif isinstance(data, dict):
-        return {k: await to_document(v, callback) for k, v in data.items()}
-    
-    elif isinstance(data, list):
-        return [await to_document(item, callback) for item in data]
-    
-    elif isinstance(data, tuple):
-        converted = [await to_document(item, callback) for item in data]
-        return tuple(converted)
-    
-    elif isinstance(data, set):
-        converted = {await to_document(item, callback) for item in data}
-        return converted
-    
-    else:
-        return data
 
+    match data:
+        case AsyncDocumentReference():
+            return await callback(data)    
+        case dict():
+            return {k: await to_document(v, callback) for k, v in data.items()}       
+        case _:
+            return data
 
-
-class Repository(Generic[T]):
+class RepositoryFirestore(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
     def __init__(self, cls: Type[T], db: Optional[AsyncClient] = None):
@@ -261,7 +251,7 @@ class Repository(Generic[T]):
        
         doc_ref = self.__get_collection_ref().document(str(id))
         error = DocumentNotFound(id, self._cls.__name__, message)
-        data =  await Repository.__get(doc_ref,error)
+        data =  await RepositoryFirestore.__get(doc_ref,error)
         return self._cls(**data)
     
     @staticmethod
