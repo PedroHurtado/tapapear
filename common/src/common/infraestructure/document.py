@@ -88,7 +88,8 @@ class MixinSerializer(BaseModel):
         collection_name = (
             metadata.get("collection_name") or value.__class__.__name__.lower()
         )
-        return DocumentReference(f"{collection_name}/{value.id}")
+        doc_id = str(value.id) if isinstance(value.id, UUID) else value.id
+        return DocumentReference(f"{collection_name}/{doc_id}")
 
     model_config = ConfigDict(frozen=True)
 
