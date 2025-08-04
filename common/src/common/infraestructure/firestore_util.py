@@ -14,7 +14,7 @@ def get_db() -> AsyncClient:
     return db
 
 def get_document(path:str)->AsyncDocumentReference:
-    get_db().document(path)
+    return get_db().document(path)
 
 def initialize_database(
     credentials_path: str,

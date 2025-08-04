@@ -15,13 +15,11 @@ from typing import (
     Callable,
     TypeVar,
     ParamSpec,
-    Optional,
-    get_origin,
-    get_args,
-    Union,
+    Optional,    
     Type,
     Generic,
-    Dict
+    Dict,
+    Awaitable
 )
 from abc import ABC, abstractmethod
 from .document import Document,DocumentReference,MixinSerializer
@@ -180,7 +178,49 @@ def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
     model_dict = model.model_dump()
     return convert_document_references(model_dict)
 
-def from_dict(cls: Type[T], data: dict) -> T:...
+async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
+    # Extraer collection e id del path
+    path_parts = doc_ref.path.split('/')
+    collection = path_parts[-2]
+    doc_id = path_parts[-1]
+    
+    error = DocumentNotFound(doc_id, collection)
+    return await Repository.__get(doc_ref, error)
+
+async def to_document(
+    data: Dict[str, Any], 
+    callback: Callable[[AsyncDocumentReference], Awaitable[Any]]
+) -> Dict[str, Any]:
+    """
+    Convierte AsyncDocumentReference a otros objetos usando un callback async.
+    Recorre la estructura una sola vez.
+    
+    Args:
+        data: Diccionario de datos de Firestore
+        callback: Función async que procesa cada AsyncDocumentReference encontrado
+        
+    Returns:
+        Diccionario con las referencias convertidas
+    """
+    if isinstance(data, AsyncDocumentReference):
+        return await callback(data)
+    
+    elif isinstance(data, dict):
+        return {k: await to_document(v, callback) for k, v in data.items()}
+    
+    elif isinstance(data, list):
+        return [await to_document(item, callback) for item in data]
+    
+    elif isinstance(data, tuple):
+        converted = [await to_document(item, callback) for item in data]
+        return tuple(converted)
+    
+    elif isinstance(data, set):
+        converted = {await to_document(item, callback) for item in data}
+        return converted
+    
+    else:
+        return data
 
 
 
@@ -216,20 +256,26 @@ class Repository(Generic[T]):
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
     async def get(self, id: UUID, message: str = None) -> T:
-
-        transaction = get_current_transaction()
+       
         doc_ref = self.__get_collection_ref().document(str(id))
-
+        error = DocumentNotFound(id, self._cls.__name__, message)
+        data =  await Repository.__get(doc_ref,error)
+        return self._cls(**data)
+    
+    @staticmethod
+    async def __get(doc_ref:AsyncDocumentReference, error:DocumentNotFound)->T:
+        
+        transaction = get_current_transaction()
         if transaction:
             doc_snapshot = await transaction.get(doc_ref)
         else:
             doc_snapshot = await doc_ref.get()
 
         if doc_snapshot.exists:
-            return from_dict(self._cls, doc_snapshot.to_dict())
-
-        raise DocumentNotFound(id, self._cls.__name__, message)
-
+            return doc_snapshot.to_dict()
+        
+        raise error
+        
     async def update(self, document: T) -> None:
 
         transaction = get_current_transaction()
@@ -273,4 +319,4 @@ class Repository(Generic[T]):
         # Las consultas no se pueden hacer dentro de transacciones en Firestore
         # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
         docs = await query.stream()
-        return [from_dict(self._cls, doc.to_dict()) async for doc in docs]
+        return [self._cls(**to_document(doc.to_dict())) async for doc in docs]
