@@ -17,15 +17,15 @@ from pydantic.fields import FieldInfo
 from pydantic_core.core_schema import FieldValidationInfo
 
 
-def Id():
+def id():
     return Field(metadata={"id": True})
 
 
-def Reference(collection_name: str = None):
+def ieference(collection_name: str = None):
     return (Field(metadata={"reference": True, "collection_name": collection_name}),)
 
 
-def Collection(name: str = None, allow_none: bool = False):
+def collection(name: str = None, allow_none: bool = False):
     default = None if allow_none else ...
     return Field(default, metadata={"subcollection": name})
 

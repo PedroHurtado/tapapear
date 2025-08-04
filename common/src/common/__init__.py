@@ -2,16 +2,14 @@ from . import infraestructure
 from . import domain
 
 from .infraestructure import(    
-    Id,
-    Collection,
-    Reference,
+    id,    
+    reference,
     Document,
     Embeddable,
     initialize_database,
     transactional,
     Repository,
     DocumentNotFound
-
 )
 
 from .mapper.mapper import get_mapper
@@ -24,9 +22,8 @@ from .domain import(
 __all__ = [
     'infraestructure',    
     'domain',
-    'Id',
-    'Collection', 
-    'Reference',
+    'id',    
+    'reference',
     'Document',
     'Embeddable'
     'initialize_database',
