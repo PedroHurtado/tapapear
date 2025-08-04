@@ -21,7 +21,7 @@ def id():
     return Field(metadata={"id": True})
 
 
-def ieference(collection_name: str = None):
+def reference(collection_name: str = None):
     return (Field(metadata={"reference": True, "collection_name": collection_name}),)
 
 

@@ -16,7 +16,7 @@ from .repository import (
     Update,
     Remove,
     Add,
-    IRepo,
+    Repository,
     InjectsRepo,
     invoke
 )
@@ -33,7 +33,7 @@ __all__ = [
     'Update',
     'Remove',
     'Add',
-    'IRepo',
+    'Repository',
     'InjectsRepo',
     'invoke'
 ]
