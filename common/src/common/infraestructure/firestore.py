@@ -158,7 +158,8 @@ def convert_document_references(data: Any) -> Any:
     # Si es un set, procesar recursivamente y mantener como set
     elif isinstance(data, set):
         return {convert_document_references(item) for item in data}
-    
+    elif isinstance(data, UUID):
+        return str(data)
     # Para cualquier otro tipo (primitivos como str, int, float, bool, None), devolver tal como está
     else:
         return data
@@ -175,7 +176,8 @@ def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
     Returns:
         Diccionario con las referencias convertidas
     """
-    model_dict = model.model_dump()
+    model_dict = model.model_dump(context={"is_root": True})
+
     return convert_document_references(model_dict)
 
 async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
@@ -272,7 +274,10 @@ class Repository(Generic[T]):
             doc_snapshot = await doc_ref.get()
 
         if doc_snapshot.exists:
-            return doc_snapshot.to_dict()
+            return {
+                id:doc_snapshot.id,
+                **doc_snapshot.to_dict()
+            }
         
         raise error
         
@@ -319,4 +324,7 @@ class Repository(Generic[T]):
         # Las consultas no se pueden hacer dentro de transacciones en Firestore
         # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
         docs = await query.stream()
-        return [self._cls(**to_document(doc.to_dict())) async for doc in docs]
+        return [
+            self._cls(**to_document({'id': doc.id, **doc.to_dict()})) 
+            async for doc in docs
+        ]

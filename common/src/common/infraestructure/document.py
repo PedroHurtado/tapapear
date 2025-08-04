@@ -10,8 +10,11 @@ from pydantic import (
     ConfigDict,
     model_serializer,
     SerializerFunctionWrapHandler,
+    field_validator
+    
 )
 from pydantic.fields import FieldInfo
+from pydantic_core.core_schema import FieldValidationInfo
 
 
 def Id():
@@ -47,14 +50,17 @@ class MixinSerializer(BaseModel):
             metadata = self.__get_custom_metadata(field_info)
 
             if metadata.get("id") is True:
-                return None
+                # Solo poner a None si es el documento raíz
+                is_root = info.context and info.context.get("is_root", False)
+                if is_root:
+                    return None
+            # Para documentos anidados, devolver el valor normal
+                return str(value) if isinstance(value, UUID) else value
 
             if metadata.get("reference") is True:
                 if value is not None:
                     return self.__get_document(value, metadata)
-
-            if isinstance(value, UUID):
-                return str(value)
+            
 
         return value
 
@@ -90,6 +96,8 @@ class MixinSerializer(BaseModel):
         )
         doc_id = str(value.id) if isinstance(value.id, UUID) else value.id
         return DocumentReference(f"{collection_name}/{doc_id}")
+    
+    
 
     model_config = ConfigDict(frozen=True)
 

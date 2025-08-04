@@ -1,5 +1,2 @@
-1. Implementar reference en document
-2. Crear la infraestructura para hacer map con Automapper
-https://pypi.org/project/py-automapper/
 3. Ver la mejor manera de los campos de indice unico, donde meterlos.
 
