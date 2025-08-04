@@ -14,6 +14,8 @@ from .infraestructure import(
 
 )
 
+from .mapper.mapper import get_mapper
+
 from .domain import(
     BaseEntity,
     ValueObject
@@ -32,5 +34,6 @@ __all__ = [
     'domain',
     'BaseEntity'
     'ValueObject'    
-    'DocumentNotFound'
+    'DocumentNotFound',
+    'get_mapper'
 ]
