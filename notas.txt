@@ -1,2 +1,19 @@
-3. Ver la mejor manera de los campos de indice unico, donde meterlos.
+1. Convertir los metodos de los repositorios 
+        get_by_<name>(name:str):...
+        get_by_<email>(email:str):...
+        get_by_<phone>(phone:str):...
+remplazarlos por una llamada
+    a este metodos
+      con esta firma
+      async def find_by_field(
+        self, field: str, value: Any, limit: Optional[int] = None
+    ) -> list[T]:
+Es decir el <name>, <email> or <phone>
+    pasarian a llamar a
+    find_by_field("name",name)
+    find_by_field("name",email)
+    find_by_field("name",phone)
+
+
+2. Ver la mejor manera de los campos de indice unico, donde meterlos.
 

@@ -38,8 +38,9 @@ class SimpleTestRepository:
 class BarRepo(InjectsRepo, Get[FooDomain]):
     pass
 
+id =uuid4()
 bar_repo = BarRepo(SimpleTestRepository(),mapper)
-foo_domain= bar_repo.get(uuid4())
+foo_domain= bar_repo.get(id())
 
 print(foo_domain)
 
