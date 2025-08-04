@@ -13,8 +13,8 @@ def get_db() -> AsyncClient:
         raise RuntimeError("DB no inicializada")
     return db
 
-def get_document(collection_name:str,id:UUID)->AsyncDocumentReference:
-    get_db().collection(collection_name).document(str(id))
+def get_document(path:str)->AsyncDocumentReference:
+    get_db().document(path)
 
 def initialize_database(
     credentials_path: str,

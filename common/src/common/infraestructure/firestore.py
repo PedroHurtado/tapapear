@@ -21,10 +21,11 @@ from typing import (
     Union,
     Type,
     Generic,
+    Dict
 )
 from abc import ABC, abstractmethod
-from .document import Document
-from .firestore_util import get_db
+from .document import Document,DocumentReference,MixinSerializer
+from .firestore_util import get_db,get_document
 from dataclasses import fields, is_dataclass
 
 logging.basicConfig(level=logging.INFO)
@@ -127,127 +128,60 @@ def transactional(func: Callable[P, T]) -> Callable[P, T]:
     return wrapper
 
 
-def resolve_real_type(annotated_type):
+
+
+def convert_document_references(data: Any) -> Any:
     """
-    Si el tipo es Optional[Collection[T]], devuelve (collection_type, T).
-    Si el tipo es Collection[T], devuelve (collection_type, T).
+    Función recursiva que convierte instancias de DocumentReference a AsyncDocumentReference
+    en cualquier parte de la estructura de datos.
+    
+    Args:
+        data: Estructura de datos que puede contener DocumentReference en cualquier nivel
+        
+    Returns:
+        La misma estructura con DocumentReference convertidos a AsyncDocumentReference
     """
-    origin = get_origin(annotated_type)
-    args = get_args(annotated_type)
+    # Caso base: si es una instancia de DocumentReference, convertirla
+    if isinstance(data, DocumentReference):
+        return get_document(data.path)
+    
+    # Si es un diccionario, procesar recursivamente cada valor
+    elif isinstance(data, dict):
+        return {key: convert_document_references(value) for key, value in data.items()}
+    
+    # Si es una lista, procesar recursivamente cada elemento
+    elif isinstance(data, list):
+        return [convert_document_references(item) for item in data]
+    
+    # Si es una tupla, procesar recursivamente y mantener como tupla
+    elif isinstance(data, tuple):
+        return tuple(convert_document_references(item) for item in data)
+    
+    # Si es un set, procesar recursivamente y mantener como set
+    elif isinstance(data, set):
+        return {convert_document_references(item) for item in data}
+    
+    # Para cualquier otro tipo (primitivos como str, int, float, bool, None), devolver tal como está
+    else:
+        return data
+  
 
-    # Caso: Optional[Set[T]] → Union[Set[T], None]
-    if origin is Union and type(None) in args:
-        actual_type = [a for a in args if a is not type(None)][0]
-        return resolve_real_type(actual_type)
+def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
+    """
+    Convierte un modelo Pydantic a un diccionario listo para Firestore,
+    reemplazando DocumentReference por AsyncDocumentReference.
+    
+    Args:
+        model: Instancia de un modelo Pydantic
+        
+    Returns:
+        Diccionario con las referencias convertidas
+    """
+    model_dict = model.model_dump()
+    return convert_document_references(model_dict)
 
-    # Caso: Set[T], List[T], etc.
-    if origin in (list, set, tuple) and args:
-        return origin, args[0]
+def from_dict(cls: Type[T], data: dict) -> T:...
 
-    return None, None
-
-
-def _resolve_inner_type(tp):
-    origin = get_origin(tp)  # obtiene la "clase base" genérica, ej. list o set
-    if origin in (list, set):
-        args = get_args(tp)  # obtiene los parámetros genéricos, ej. [Comment] o [Tag]
-        if args:
-            return args[0]  # devuelve el tipo interno (el primer parámetro genérico)
-    return None  # si no es list o set o no tiene parámetros, devuelve None
-
-
-def to_dict(obj: T, db: AsyncClient = None) -> dict:
-    result = {}
-    for name, field in obj:
-        value = getattr(obj, name)
-        meta = field.metadata
-
-        # ID (posiblemente UUID)
-        if meta.get("id"):
-            result[name] = str(value) if isinstance(value, UUID) else value
-
-        # Subcolecciones (List[Document] o Set[Document])
-        elif "subcollection" in meta:
-            if value is None:
-                result[name] = None
-            else:
-                inner_type = _resolve_inner_type(field.annotation)
-                if inner_type:
-                    result[name] = [to_dict(item, db=db) for item in value]
-                else:
-                    raise TypeError(f"Unsupported collection type for field '{name}'")
-
-        # Referencias a otros documentos
-        elif meta.get("reference"):
-            if value is None:
-                result[name] = None
-            else:
-                ref_id = getattr(value, "id", None)
-                if not ref_id:
-                    raise ValueError(
-                        f"La referencia en '{name}' no tiene 'id' definido"
-                    )
-                if not db:
-                    raise ValueError(
-                        "El parámetro 'db' (Firestore client) es necesario para serializar referencias"
-                    )
-                collection = (
-                    meta.get("reference") or name
-                )  # usar valor explícito o nombre del campo
-                result[name] = db.collection(collection).document(str(ref_id))
-
-        # Resto de campos normales
-        else:
-            result[name] = str(value) if isinstance(value, UUID) else value
-
-    return result
-
-
-def from_dict(cls: Type[T], data: dict) -> T:
-
-    if not issubclass(cls, Document):
-        raise TypeError(f"{cls} is not a Document")
-
-    kwargs = {}
-    for f in cls.model_fields:
-        value = data.get(f.name)
-        meta = f.metadata
-
-        if meta.get("id"):
-            kwargs[f.name] = uuid.UUID(value) if isinstance(value, str) else value
-
-        elif "subcollection" in meta:
-            if value is None:
-                kwargs[f.name] = None
-            else:
-                collection_type, item_type = resolve_real_type(f.type)
-                if collection_type:
-                    kwargs[f.name] = collection_type(
-                        from_dict(item_type, item) for item in value
-                    )
-                else:
-                    raise TypeError(f"Unsupported collection type for field '{f.name}'")
-
-        elif meta.get("reference"):
-            if value is None:
-                kwargs[f.name] = None
-            else:
-                # value es DocumentReference
-                doc_snapshot = value.get()
-                doc_data = doc_snapshot.to_dict()
-                ref_cls = f.type
-                # Solo nivel 1: inyectar también el ID
-                doc_data["id"] = doc_snapshot.id
-                kwargs[f.name] = ref_cls(**doc_data)
-
-        else:
-            # 🚀 Conversión automática de UUIDs si el tipo declarado es uuid.UUID
-            if isinstance(value, str) and f.type is uuid.UUID:
-                kwargs[f.name] = uuid.UUID(value)
-            else:
-                kwargs[f.name] = value
-
-    return cls(**kwargs)
 
 
 class Repository(Generic[T]):
@@ -272,7 +206,7 @@ class Repository(Generic[T]):
 
         doc_ref = self.__get_collection().document(str(document.id))
 
-        data_with_meta = to_dict(document, self.db)
+        data_with_meta = to_firestore(document)
 
         if transaction:
             transaction.create(doc_ref, data_with_meta)
@@ -301,10 +235,9 @@ class Repository(Generic[T]):
         transaction = get_current_transaction()
         doc_ref = self.__get_collection_ref().documen(str(document.id))
 
-        update_data = to_dict(document, self._db)
+        update_data = to_firestore(document)
 
         if transaction:
-
             transaction.update(doc_ref, update_data)
         else:
             # Operación directa
