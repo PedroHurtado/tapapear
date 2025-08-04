@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Any, Union, Annotated, get_args, get_origin
+from typing import Any, Annotated, get_args, get_origin
 
 from google.cloud.firestore import AsyncDocumentReference
 from pydantic import (
@@ -10,15 +10,26 @@ from pydantic import (
     ConfigDict,
     model_serializer,
     SerializerFunctionWrapHandler,
-    BeforeValidator,
 )
 from pydantic.fields import FieldInfo
-
-from .firestore_util import get_document
 
 
 def Id():
     return Field(metadata={"id": True})
+
+
+def Reference(collection_name: str = None):
+    return (Field(metadata={"reference": True, "collection_name": collection_name}),)
+
+
+def Collection(name: str = None, allow_none: bool = False):
+    default = None if allow_none else ...
+    return Field(default, metadata={"subcollection": name})
+
+
+class DocumentReference(BaseModel):
+    path: str
+    model_config = ConfigDict(frozen=True)
 
 
 class MixinSerializer(BaseModel):
@@ -26,16 +37,6 @@ class MixinSerializer(BaseModel):
     def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
         data = serializer(self)
         return {k: v for k, v in data.items() if v is not None}
-
-
-class Document(MixinSerializer):
-    id: UUID = Id()
-
-    def __eq__(self, value):
-        return isinstance(value, Document) and value.id == self.id
-
-    def __hash__(self):
-        return hash(self.id)
 
     @field_serializer("*")
     def __serialize_references(self, value: Any, info: FieldSerializationInfo) -> Any:
@@ -87,29 +88,19 @@ class Document(MixinSerializer):
         collection_name = (
             metadata.get("collection_name") or value.__class__.__name__.lower()
         )
-        return get_document(collection_name, value.id)
+        return DocumentReference(f"{collection_name}/{value.id}")
 
     model_config = ConfigDict(frozen=True)
 
 
+class Document(MixinSerializer):
+    id: UUID = Id()
+
+    def __eq__(self, value):
+        return isinstance(value, Document) and value.id == self.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+
 class Embeddable(MixinSerializer): ...
-
-
-def ensure_reference(value: Union[Document | AsyncDocumentReference, None]):
-    if value is None:
-        return value
-    if isinstance(value, AsyncDocumentReference):
-        return value
-
-
-def Reference(collection_name: str = None):
-    return Annotated[
-        Union[Document | AsyncDocumentReference, None],
-        BeforeValidator(ensure_reference),
-        Field(metadata={"reference": True, "collection_name": collection_name}),
-    ]
-
-
-def Collection(name: str = None, allow_none: bool = False):
-    default = None if allow_none else ...
-    return Field(default, metadata={"subcollection": name})
