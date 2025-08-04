@@ -11,6 +11,15 @@ from .firestore import(
     RepositoryFirestore,    
     initialize_database
 )
+from .repository import (
+    Get,
+    Update,
+    Remove,
+    Add,
+    IRepo,
+    InjectsRepo,
+    invoke
+)
 __all__ = [    
     'id',    
     'reference',
@@ -19,5 +28,12 @@ __all__ = [
     'transactional',
     'DocumentNotFound',
     'RepositoryFirestore',
-    'Embeddable'
+    'Embeddable',
+    'Get',
+    'Update',
+    'Remove',
+    'Add',
+    'IRepo',
+    'InjectsRepo',
+    'invoke'
 ]
