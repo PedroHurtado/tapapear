@@ -103,7 +103,7 @@ class MixinSerializer(BaseModel):
 
 
 class Document(MixinSerializer):
-    id: UUID = Id()
+    id: UUID = id()
 
     def __eq__(self, value):
         return isinstance(value, Document) and value.id == self.id
