@@ -17,3 +17,14 @@ Es decir el <name>, <email> or <phone>
 
 2. Ver la mejor manera de los campos de indice unico, donde meterlos.
 
+3. Ver codigo repetido de pydantic
+    quitar None al hacer model_dump
+    ver donde poner id,refence,collection
+    implementar __get__ en firestore repositori events
+
+4. Estudiar el proceso que lee eventos sin procesar los procesa
+    los borra de una collection y los guarda en otra collection
+5. Despues de estudiar algolia ver si interesa extraer el data 
+    de cada evento de cara a modificaciones mas eficientes
+    y que generen menos trafico
+
