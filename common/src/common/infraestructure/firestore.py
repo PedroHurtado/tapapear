@@ -15,14 +15,15 @@ from typing import (
     Callable,
     TypeVar,
     ParamSpec,
-    Optional,    
+    Optional,
     Type,
     Generic,
     Dict,
-    Awaitable
+    Awaitable,
 )
+from common.domain.events import DomainEvent
 from abc import ABC, abstractmethod
-from .document import Document,DocumentReference,MixinSerializer
+from .document import Document, DocumentReference, MixinSerializer
 from dataclasses import fields, is_dataclass
 
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 # Types para mejor tipado
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
+R = TypeVar("R", bound=DomainEvent)
 
 
 class TransactionManager:
@@ -66,29 +68,32 @@ class TransactionManager:
             raise
 
 
-
 db: AsyncClient = None
 transaction_manager: Optional[TransactionManager] = None
 _current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
     "current_transaction", default=None
 )
 
+
 async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
     # Extraer collection e id del path
-    path_parts = doc_ref.path.split('/')
+    path_parts = doc_ref.path.split("/")
     collection = path_parts[-2]
     doc_id = path_parts[-1]
-    
+
     error = DocumentNotFound(doc_id, collection)
     return await RepositoryFirestore.__get(doc_ref, error)
+
 
 def get_db() -> AsyncClient:
     if db is None:
         raise RuntimeError("DB no inicializada")
     return db
 
-def get_document(path:str)->AsyncDocumentReference:
+
+def get_document(path: str) -> AsyncDocumentReference:
     return get_db().document(path)
+
 
 def init_firestore_transactions(db: firestore.AsyncClient):
     """Inicializar el sistema de transacciones"""
@@ -100,6 +105,7 @@ def get_current_transaction() -> Optional[AsyncTransaction]:
     """Obtiene la transacción actual del contexto"""
     return _current_transaction.get()
 
+
 def initialize_database(
     credentials_path: str,
     database: str = "(default)",
@@ -109,7 +115,6 @@ def initialize_database(
     cred = Credentials.from_service_account_file(credentials_path)
     db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
     init_firestore_transactions(db)
-
 
 
 def transactional(func: Callable[P, T]) -> Callable[P, T]:
@@ -160,7 +165,9 @@ def convert_document_references(data: Any) -> Any:
         case DocumentReference():
             return get_document(data.path)
         case dict():
-            return {key: convert_document_references(value) for key, value in data.items()}
+            return {
+                key: convert_document_references(value) for key, value in data.items()
+            }
         case list():
             return [convert_document_references(item) for item in data]
         case tuple():
@@ -172,19 +179,15 @@ def convert_document_references(data: Any) -> Any:
         case _:
             return data
 
-  
-
-
-
 
 def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
     """
     Convierte un modelo Pydantic a un diccionario listo para Firestore,
     reemplazando DocumentReference por AsyncDocumentReference.
-    
+
     Args:
         model: Instancia de un modelo Pydantic
-        
+
     Returns:
         Diccionario con las referencias convertidas
     """
@@ -193,28 +196,28 @@ def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
 
 
 async def to_document(
-    data: Dict[str, Any], 
-    callback: Callable[[AsyncDocumentReference], Awaitable[Any]]
+    data: Dict[str, Any], callback: Callable[[AsyncDocumentReference], Awaitable[Any]]
 ) -> Dict[str, Any]:
     """
     Convierte AsyncDocumentReference a otros objetos usando un callback async.
     Recorre la estructura una sola vez.
-    
+
     Args:
         data: Diccionario de datos de Firestore
         callback: Función async que procesa cada AsyncDocumentReference encontrado
-        
+
     Returns:
         Diccionario con las referencias convertidas
     """
 
     match data:
         case AsyncDocumentReference():
-            return await callback(data)    
+            return await callback(data)
         case dict():
-            return {k: await to_document(v, callback) for k, v in data.items()}       
+            return {k: await to_document(v, callback) for k, v in data.items()}
         case _:
             return data
+
 
 class RepositoryFirestore(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
@@ -238,7 +241,7 @@ class RepositoryFirestore(Generic[T]):
 
         doc_ref = self.__get_collection().document(str(document.id))
 
-        data_with_meta = to_firestore(document)
+        data_with_meta = to_firestore(document)        
 
         if transaction:
             transaction.create(doc_ref, data_with_meta)
@@ -248,15 +251,15 @@ class RepositoryFirestore(Generic[T]):
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
     async def get(self, id: UUID, message: str = None) -> T:
-       
+
         doc_ref = self.__get_collection_ref().document(str(id))
         error = DocumentNotFound(id, self._cls.__name__, message)
-        data =  await RepositoryFirestore.__get(doc_ref,error)
+        data = await RepositoryFirestore.__get(doc_ref, error)
         return self._cls(**data)
-    
+
     @staticmethod
-    async def __get(doc_ref:AsyncDocumentReference, error:DocumentNotFound)->T:
-        
+    async def __get(doc_ref: AsyncDocumentReference, error: DocumentNotFound) -> T:
+
         transaction = get_current_transaction()
         if transaction:
             doc_snapshot = await transaction.get(doc_ref)
@@ -264,20 +267,16 @@ class RepositoryFirestore(Generic[T]):
             doc_snapshot = await doc_ref.get()
 
         if doc_snapshot.exists:
-            return {
-                id:doc_snapshot.id,
-                **doc_snapshot.to_dict()
-            }
-        
+            return {id: doc_snapshot.id, **doc_snapshot.to_dict()}
+
         raise error
-        
+
     async def update(self, document: T) -> None:
 
         transaction = get_current_transaction()
         doc_ref = self.__get_collection_ref().documen(str(document.id))
 
-        update_data = to_firestore(document)
-
+        update_data = to_firestore(document)        
         if transaction:
             transaction.update(doc_ref, update_data)
         else:
@@ -306,7 +305,7 @@ class RepositoryFirestore(Generic[T]):
         self, field: str, value: Any, limit: Optional[int] = None
     ) -> list[T]:
         _value = str(value) if isinstance(value, UUID) else value
-        query = self.__get_collection_ref().where(field, "==", _value)
+        query = self.__get_collection().where(field, "==", _value)
 
         if limit:
             query = query.limit(limit)
@@ -315,6 +314,53 @@ class RepositoryFirestore(Generic[T]):
         # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
         docs = await query.stream()
         return [
-            self._cls(**to_document({'id': doc.id, **doc.to_dict()})) 
+            self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
+            async for doc in docs
+        ]
+
+
+class RepositoryEventsFirestore(Generic[R]):
+    """Repository base que maneja automáticamente las transacciones"""
+
+    def __init__(self, cls: Type[R], db: Optional[AsyncClient] = None):
+        if not issubclass(cls, DomainEvent):
+            raise ValueError(
+                f"La clase {cls.__name__} debe ser una subclase de DomainEvent"
+            )
+
+        self._cls = cls
+        self._collection_name = "outbux"
+        self._db = db or get_db()
+
+    def __get_collection(self):
+        return self._db.collection(self._collection_name)
+
+    async def create(self, document: R) -> None:
+
+        transaction = get_current_transaction()
+
+        doc_ref = self.__get_collection().document(str(document.id))
+
+        data_with_meta = to_firestore(document)
+        data_with_meta = {**data_with_meta}  # copia para no mutar el original si viene de otra parte
+        data_with_meta.pop("id", None)
+
+
+        if transaction:
+            transaction.create(doc_ref, data_with_meta)
+        else:
+            await doc_ref.create(data_with_meta)
+
+        logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
+
+    async def query(self, limit: int = 10) -> list[R]:
+
+        query = self.__get_collection().order_by("timestamp").limit(1)       
+
+        # Las consultas no se pueden hacer dentro de transacciones en Firestore
+        # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
+        docs = await query.stream()
+        return [
+            self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
             async for doc in docs
         ]

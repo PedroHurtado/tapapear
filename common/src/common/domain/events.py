@@ -4,7 +4,7 @@ from typing import  Dict, List, Type
 from uuid import uuid4
 import asyncio
 from functools import wraps
-from pydantic import BaseModel
+from pydantic import BaseModel,model_serializer,SerializerFunctionWrapHandler 
 
 
 # ================================
@@ -38,6 +38,11 @@ class DomainEvent(BaseModel):
     timestamp: datetime = datetime.now()
     processed: bool = False
     event_type: str
+    @model_serializer(mode="wrap")
+    def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
+        data = serializer(self)
+        return {k: v for k, v in data.items() if v is not None}
+
     
     
 
