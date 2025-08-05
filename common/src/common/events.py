@@ -6,6 +6,7 @@ from common.domain.events import(
     event_handler,
     event_publisher,
     EventSubscriber
+    
 )
 # ================================
 # EJEMPLOS DE USO
