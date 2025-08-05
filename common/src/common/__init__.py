@@ -16,12 +16,16 @@ from .mapper.mapper import get_mapper
 
 from .domain import(
     BaseEntity,
-    ValueObject
+    ValueObject, 
+    events,    
 )
 
 __all__ = [
     'infraestructure',    
     'domain',
+    'events',
+    'BaseEntity',
+    'ValueObject',         
     'id',    
     'reference',
     'Document',
