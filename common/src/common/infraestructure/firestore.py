@@ -241,7 +241,7 @@ class RepositoryFirestore(Generic[T]):
 
         doc_ref = self.__get_collection().document(str(document.id))
 
-        data_with_meta = to_firestore(document)        
+        data_with_meta = to_firestore(document)
 
         if transaction:
             transaction.create(doc_ref, data_with_meta)
@@ -276,7 +276,7 @@ class RepositoryFirestore(Generic[T]):
         transaction = get_current_transaction()
         doc_ref = self.__get_collection_ref().documen(str(document.id))
 
-        update_data = to_firestore(document)        
+        update_data = to_firestore(document)
         if transaction:
             transaction.update(doc_ref, update_data)
         else:
@@ -310,9 +310,13 @@ class RepositoryFirestore(Generic[T]):
         if limit:
             query = query.limit(limit)
 
-        # Las consultas no se pueden hacer dentro de transacciones en Firestore
-        # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
-        docs = await query.stream()
+        transaction = get_current_transaction()
+        
+        if transaction:
+            docs = query.stream(transaction=transaction)
+        else:
+            docs = query.stream()
+
         return [
             self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
             async for doc in docs
@@ -342,9 +346,10 @@ class RepositoryEventsFirestore(Generic[R]):
         doc_ref = self.__get_collection().document(str(document.id))
 
         data_with_meta = to_firestore(document)
-        data_with_meta = {**data_with_meta}  # copia para no mutar el original si viene de otra parte
+        data_with_meta = {
+            **data_with_meta
+        }  # copia para no mutar el original si viene de otra parte
         data_with_meta.pop("id", None)
-
 
         if transaction:
             transaction.create(doc_ref, data_with_meta)
@@ -354,12 +359,14 @@ class RepositoryEventsFirestore(Generic[R]):
         logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
 
     async def query(self, limit: int = 10) -> list[R]:
+        query = self.__get_collection().order_by("timestamp").limit(limit)
+        transaction = get_current_transaction()
 
-        query = self.__get_collection().order_by("timestamp").limit(1)       
+        if transaction:
+            docs = query.stream(transaction=transaction)
+        else:
+            docs = query.stream()
 
-        # Las consultas no se pueden hacer dentro de transacciones en Firestore
-        # pero si necesitas consistencia, deberías hacer get_by_id de documentos específicos
-        docs = await query.stream()
         return [
             self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
             async for doc in docs

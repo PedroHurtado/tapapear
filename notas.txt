@@ -27,4 +27,5 @@ Es decir el <name>, <email> or <phone>
 5. Despues de estudiar algolia ver si interesa extraer el data 
     de cada evento de cara a modificaciones mas eficientes
     y que generen menos trafico
+6. Estudiar set y update en firestore y ver dif.py de common
 
