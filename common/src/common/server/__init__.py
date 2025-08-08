@@ -1,7 +1,5 @@
-from .routers import (
-    get_routers
+from .featrures import (
+    get_feature_modules
 )
 
-from .routers import get_routers
-
-__all__ = ["get_routers"]
+__all__ = ["get_feature_modules"]
