@@ -1,10 +1,8 @@
-# common/component.py
-import inspect
+# common/ioc/components.py
 from typing import Type, Dict, Any
 
 component_registry: Dict[str, Dict[str, Any]] = {}
 
-# common/ioc.py
 from enum import Enum
 
 class ProviderType(Enum):
