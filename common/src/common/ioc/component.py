@@ -12,7 +12,7 @@ class ProviderType(Enum):
 
 
 def get_component_key(cls: Type) -> str:
-    return f"{cls.__module__}.{cls.__name__}"
+    return f"{cls.__module__}.{cls.__name__}".replace('.', '_')
 
 def component(_cls=None, *, provider_type: ProviderType = ProviderType.SINGLETON):
     def wrap(cls):

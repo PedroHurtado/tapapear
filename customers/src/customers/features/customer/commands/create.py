@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from common.ioc import component,deps
+from common.ioc import component,deps, inject_dependencies
 
 router = APIRouter(prefix="/customers")
 
@@ -18,6 +18,7 @@ class Service():
         return Response()
 
 @router.post("/")
+@inject_dependencies
 async def controller(res:Request, service:Service=deps(Service)):
     return await service(), 201
 
