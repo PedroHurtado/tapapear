@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horario de Restaurante El Buen Sabor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* Estilos personalizados para los iconos SVG */
+        .icon {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.5rem;
+            fill: currentColor;
+        }
+
+        .edit-container {
+            border: 2px dashed #d1d5db;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-8">
+
+    <div class="container mx-auto bg-white rounded-xl shadow-lg p-8 max-w-4xl">
+        <!-- HEADER -->
+        <header class="text-center mb-8">
+            <h1 id="restaurant-name" class="text-4xl font-extrabold text-gray-900 mb-2"></h1>
+            <div class="bg-gray-50 rounded-lg p-4 mt-4">
+                <p class="text-gray-600"><strong>Tipo:</strong> <span id="restaurant-type"></span></p>
+                <p class="text-gray-600"><strong>Zona Horaria:</strong> <span id="restaurant-timezone"></span></p>
+            </div>
+        </header>
+
+        <hr class="my-8 border-gray-200">
+
+        <!-- BOTÓN PARA GUARDAR CAMBIOS -->
+        <div class="text-center mb-8">
+            <button id="save-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300">
+                Guardar Cambios (Ver en consola)
+            </button>
+        </div>
+        
+        <hr class="my-8 border-gray-200">
+
+        <!-- SECCIÓN DE HORARIO REGULAR -->
+        <main>
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Horario Regular</h2>
+                <div id="regular-schedule" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <!-- Los días se renderizarán aquí -->
+                </div>
+            </section>
+
+            <hr class="my-8 border-gray-200">
+
+            <!-- SECCIÓN PARA AGREGAR EXCEPCIONES -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Excepciones y Días Festivos</h2>
+                <div id="exceptions-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                    <!-- Las excepciones se renderizarán aquí -->
+                </div>
+                <div class="edit-container bg-white">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Agregar Nueva Excepción</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label for="exception-date" class="block text-sm font-medium text-gray-700">Fecha</label>
+                            <input type="date" id="exception-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="exception-reason" class="block text-sm font-medium text-gray-700">Motivo</label>
+                            <input type="text" id="exception-reason" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div class="flex items-center mt-6">
+                            <input type="checkbox" id="exception-open" checked class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="exception-open" class="ml-2 block text-sm text-gray-900">Abierto</label>
+                        </div>
+                        <button id="add-exception-button" class="mt-6 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-full">
+                            Agregar Excepción
+                        </button>
+                    </div>
+                    <div id="new-exception-hours" class="mt-4 border-t pt-4 hidden">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <label for="exception-open-time" class="text-sm font-medium">Apertura:</label>
+                            <input type="time" id="exception-open-time" class="rounded-md border-gray-300 shadow-sm p-1">
+                            <label for="exception-close-time" class="text-sm font-medium">Cierre:</label>
+                            <input type="time" id="exception-close-time" class="rounded-md border-gray-300 shadow-sm p-1">
+                            <button id="add-exception-hour" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded-full text-sm">+</button>
+                        </div>
+                        <ul id="exception-hours-list" class="list-disc ml-6 text-sm"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <hr class="my-8 border-gray-200">
+            
+            <!-- SECCIÓN DE HORARIOS POR TEMPORADA -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Horarios por Temporada</h2>
+                <div id="seasonal-schedule" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <!-- Los horarios de temporada se renderizarán aquí -->
+                </div>
+            </section>
+
+            <hr class="my-8 border-gray-200">
+
+            <!-- SECCIÓN DE SERVICIOS -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Descripción de Servicios</h2>
+                <div id="services-description" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                    <!-- Los servicios se renderizarán aquí -->
+                </div>
+                <div class="edit-container bg-white">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Agregar Nuevo Servicio</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="new-service-name" class="block text-sm font-medium text-gray-700">Nombre del Servicio</label>
+                            <input type="text" id="new-service-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="new-service-desc" class="block text-sm font-medium text-gray-700">Descripción</label>
+                            <input type="text" id="new-service-desc" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="new-service-start" class="block text-sm font-medium text-gray-700">Hora de Inicio</label>
+                            <input type="time" id="new-service-start" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="new-service-end" class="block text-sm font-medium text-gray-700">Hora de Fin</label>
+                            <input type="time" id="new-service-end" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                    </div>
+                    <button id="add-service-button" class="mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-full w-full">
+                        Agregar Servicio
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Los datos iniciales del restaurante
+        let data = {
+            "establecimiento": {
+                "nombre": "Restaurante El Buen Sabor",
+                "tipo": "restaurante_bar",
+                "zona_horaria": "America/Mexico_City"
+            },
+            "horario_regular": {
+                "lunes": { "abierto": true, "horarios": [{ "apertura": "12:00", "cierre": "23:00", "servicio": "almuerzo_cena" }] },
+                "martes": { "abierto": true, "horarios": [{ "apertura": "12:00", "cierre": "23:00", "servicio": "almuerzo_cena" }] },
+                "miercoles": { "abierto": true, "horarios": [{ "apertura": "12:00", "cierre": "23:00", "servicio": "almuerzo_cena" }] },
+                "jueves": { "abierto": true, "horarios": [{ "apertura": "12:00", "cierre": "23:30", "servicio": "almuerzo_cena" }] },
+                "viernes": { "abierto": true, "horarios": [{ "apertura": "12:00", "cierre": "15:30", "servicio": "almuerzo" }, { "apertura": "19:00", "cierre": "01:00", "servicio": "cena_bar" }] },
+                "sabado": { "abierto": true, "horarios": [{ "apertura": "13:00", "cierre": "01:30", "servicio": "almuerzo_cena_bar" }] },
+                "domingo": { "abierto": true, "horarios": [{ "apertura": "13:00", "cierre": "22:00", "servicio": "almuerzo_cena" }] }
+            },
+            "excepciones": [
+                { "fecha": "2025-01-01", "motivo": "Año Nuevo", "abierto": false, "horarios": [] },
+                { "fecha": "2025-02-14", "motivo": "San Valentín", "abierto": true, "horarios": [{ "apertura": "18:00", "cierre": "02:00", "servicio": "cena_especial", "reserva_requerida": true }] },
+                { "fecha": "2025-05-01", "motivo": "Día del Trabajo", "abierto": false, "horarios": [] }
+            ],
+            "horarios_temporada": [
+                {
+                    "nombre": "Temporada Verano",
+                    "fecha_inicio": "2025-06-21",
+                    "fecha_fin": "2025-09-22",
+                    "modificaciones": {
+                        "viernes": { "horarios": [{ "apertura": "12:00", "cierre": "15:30", "servicio": "almuerzo" }, { "apertura": "19:00", "cierre": "02:00", "servicio": "cena_bar_terraza" }] },
+                        "sabado": { "horarios": [{ "apertura": "13:00", "cierre": "02:30", "servicio": "almuerzo_cena_bar_terraza" }] }
+                    }
+                }
+            ],
+            "servicios_por_horario": {
+                "almuerzo": { "descripcion": "Menú de almuerzo completo", "horario_inicio": "12:00", "horario_fin": "16:00" },
+                "cena": { "descripcion": "Menú completo de cena", "horario_inicio": "19:00", "horario_fin": "23:00" },
+                "bar": { "descripcion": "Servicio de bar y aperitivos", "horario_inicio": "20:00", "horario_fin": "01:30" }
+            },
+            "configuracion": {
+                "formato_hora": "24h",
+                "permite_reservas": true,
+                "tiempo_reserva_minimo": 30,
+                "ultima_actualizacion": "2025-08-11T00:00:00Z",
+                "contacto": {
+                    "telefono": "+52-55-1234-5678",
+                    "email": "reservas@elbuensabor.com"
+                }
+            }
+        };
+
+        // Función para renderizar la interfaz de usuario
+        function renderUI() {
+            // Rellenar información del establecimiento
+            document.getElementById('restaurant-name').textContent = data.establecimiento.nombre;
+            document.getElementById('restaurant-type').textContent = data.establecimiento.tipo;
+            document.getElementById('restaurant-timezone').textContent = data.establecimiento.zona_horaria;
+
+            // Rellenar horario regular con inputs editables
+            const regularScheduleDiv = document.getElementById('regular-schedule');
+            regularScheduleDiv.innerHTML = '';
+            for (const [day, dayData] of Object.entries(data.horario_regular)) {
+                let html = `
+                    <div class="bg-gray-50 rounded-lg p-4 shadow-sm border border-gray-200">
+                        <h3 class="text-lg font-semibold capitalize">${day}</h3>
+                        <div class="flex items-center mt-2">
+                            <input type="checkbox" data-day="${day}" class="day-toggle h-4 w-4 text-blue-600 rounded" ${dayData.abierto ? 'checked' : ''}>
+                            <span class="ml-2 text-sm">${dayData.abierto ? 'Abierto' : 'Cerrado'}</span>
+                        </div>
+                        <div class="horarios-list mt-2" data-day="${day}">
+                            ${dayData.horarios.map((h, index) => `
+                                <div class="flex items-center space-x-2 mt-2">
+                                    <input type="time" value="${h.apertura}" class="w-full text-sm rounded-md border-gray-300 p-1">
+                                    <span class="text-sm">-</span>
+                                    <input type="time" value="${h.cierre}" class="w-full text-sm rounded-md border-gray-300 p-1">
+                                    <button class="remove-hour-button text-red-500 hover:text-red-700" data-day="${day}" data-index="${index}">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button class="add-hour-button mt-2 text-blue-500 hover:text-blue-700 font-medium text-sm" data-day="${day}">+ Agregar Horario</button>
+                    </div>
+                `;
+                regularScheduleDiv.innerHTML += html;
+            }
+
+            // Rellenar excepciones
+            const exceptionsListDiv = document.getElementById('exceptions-list');
+            exceptionsListDiv.innerHTML = '';
+            data.excepciones.forEach((ex, index) => {
+                let html = `
+                    <div class="bg-yellow-50 rounded-lg p-4 shadow-sm border border-yellow-300">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-md font-semibold">${ex.fecha} - ${ex.motivo}</h3>
+                            <button class="remove-exception-button text-red-500 hover:text-red-700" data-index="${index}">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 112 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd"></path></svg>
+                            </button>
+                        </div>
+                        <p class="text-sm ${ex.abierto ? 'text-green-600' : 'text-red-600'} font-medium">Estado: ${ex.abierto ? 'Abierto' : 'Cerrado'}</p>
+                        ${ex.horarios.length > 0 ? `
+                            <ul class="list-disc ml-4 text-sm mt-2">
+                                ${ex.horarios.map(h => `<li>${h.apertura} - ${h.cierre} (${h.servicio.replace(/_/g, ' ')})</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                    </div>
+                `;
+                exceptionsListDiv.innerHTML += html;
+            });
+
+            // Rellenar horarios de temporada (solo lectura en esta versión)
+            const seasonalScheduleDiv = document.getElementById('seasonal-schedule');
+            seasonalScheduleDiv.innerHTML = '';
+            data.horarios_temporada.forEach(temporada => {
+                let html = `
+                    <div class="bg-blue-50 rounded-lg p-4 shadow-sm border border-blue-300">
+                        <h3 class="text-md font-semibold">${temporada.nombre}</h3>
+                        <p class="text-sm text-gray-600"><strong>Fechas:</strong> ${temporada.fecha_inicio} a ${temporada.fecha_fin}</p>
+                        <p class="text-sm text-gray-600 mt-2"><strong>Modificaciones:</strong></p>
+                        <ul class="list-disc ml-4 text-sm">
+                            ${Object.entries(temporada.modificaciones).map(([day, dayData]) => `
+                                <li><strong>${day}:</strong> ${dayData.horarios.map(h => `${h.apertura}-${h.cierre}`).join(', ')}</li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+                seasonalScheduleDiv.innerHTML += html;
+            });
+
+            // Rellenar descripción de servicios
+            const servicesDescriptionDiv = document.getElementById('services-description');
+            servicesDescriptionDiv.innerHTML = '';
+            for (const [service, serviceData] of Object.entries(data.servicios_por_horario)) {
+                let html = `
+                    <div class="bg-green-50 rounded-lg p-4 shadow-sm border border-green-300">
+                        <h3 class="text-md font-semibold capitalize">${service.replace(/_/g, ' ')}</h3>
+                        <p class="text-sm text-gray-600">${serviceData.descripcion}</p>
+                        <p class="text-sm text-gray-600 mt-1">Horario: ${serviceData.horario_inicio} - ${serviceData.horario_fin}</p>
+                    </div>
+                `;
+                servicesDescriptionDiv.innerHTML += html;
+            }
+        }
+
+        // Función para inicializar los event listeners
+        function initEventListeners() {
+            // Manejar los cambios del horario regular
+            document.getElementById('regular-schedule').addEventListener('click', (e) => {
+                // Agregar un nuevo horario
+                if (e.target.classList.contains('add-hour-button')) {
+                    const day = e.target.dataset.day;
+                    data.horario_regular[day].horarios.push({ apertura: "00:00", cierre: "00:00", servicio: "" });
+                    renderUI();
+                }
+                // Eliminar un horario
+                if (e.target.classList.contains('remove-hour-button')) {
+                    const day = e.target.dataset.day;
+                    const index = e.target.dataset.index;
+                    data.horario_regular[day].horarios.splice(index, 1);
+                    renderUI();
+                }
+            });
+
+            // Manejar el toggle de abierto/cerrado para el horario regular
+            document.getElementById('regular-schedule').addEventListener('change', (e) => {
+                if (e.target.classList.contains('day-toggle')) {
+                    const day = e.target.dataset.day;
+                    data.horario_regular[day].abierto = e.target.checked;
+                    renderUI();
+                }
+            });
+
+            // Manejar la adición de excepciones
+            document.getElementById('add-exception-button').addEventListener('click', () => {
+                const date = document.getElementById('exception-date').value;
+                const reason = document.getElementById('exception-reason').value;
+                const isOpen = document.getElementById('exception-open').checked;
+                if (date && reason) {
+                    data.excepciones.push({
+                        fecha: date,
+                        motivo: reason,
+                        abierto: isOpen,
+                        horarios: [] // Placeholder, podría ser más complejo
+                    });
+                    renderUI();
+                }
+            });
+
+            // Manejar la eliminación de excepciones
+            document.getElementById('exceptions-list').addEventListener('click', (e) => {
+                if (e.target.closest('.remove-exception-button')) {
+                    const index = e.target.closest('.remove-exception-button').dataset.index;
+                    data.excepciones.splice(index, 1);
+                    renderUI();
+                }
+            });
+            
+            // Manejar la adición de servicios
+            document.getElementById('add-service-button').addEventListener('click', () => {
+                const name = document.getElementById('new-service-name').value.toLowerCase().replace(/\s/g, '_');
+                const desc = document.getElementById('new-service-desc').value;
+                const start = document.getElementById('new-service-start').value;
+                const end = document.getElementById('new-service-end').value;
+
+                if (name && desc && start && end) {
+                    data.servicios_por_horario[name] = {
+                        descripcion: desc,
+                        horario_inicio: start,
+                        horario_fin: end
+                    };
+                    renderUI();
+                }
+            });
+
+            // Manejar el botón de guardar
+            document.getElementById('save-button').addEventListener('click', () => {
+                // Recolectar datos del horario regular
+                const regularCards = document.querySelectorAll('#regular-schedule > div');
+                regularCards.forEach(card => {
+                    const day = card.querySelector('h3').textContent.toLowerCase();
+                    const isOpen = card.querySelector('.day-toggle').checked;
+                    const hoursList = card.querySelector('.horarios-list');
+                    
+                    data.horario_regular[day].abierto = isOpen;
+                    if(isOpen) {
+                        data.horario_regular[day].horarios = [];
+                        hoursList.querySelectorAll('.flex').forEach(hourInput => {
+                            const apertura = hourInput.querySelector('input[type="time"]').value;
+                            const cierre = hourInput.querySelectorAll('input[type="time"]')[1].value;
+                            if (apertura && cierre) {
+                                data.horario_regular[day].horarios.push({ apertura, cierre, servicio: "custom" });
+                            }
+                        });
+                    } else {
+                        data.horario_regular[day].horarios = [];
+                    }
+                });
+
+                console.log("¡Datos del restaurante actualizados!");
+                console.log(JSON.stringify(data, null, 2));
+            });
+        }
+
+        window.onload = function() {
+            renderUI();
+            initEventListeners();
+        };
+    </script>
+</body>
+</html>
