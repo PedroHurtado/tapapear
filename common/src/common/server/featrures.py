@@ -1,20 +1,19 @@
 import glob
 import os
 import importlib.util
+import sys
 from typing import List, Tuple, Any
 
 
 def get_feature_modules(
-    base_path: str,
-    features_dir: str = "features",
+    features_path: str = "features",
     router_var_name: str = "router"
 ) -> Tuple[List[Any], List[str]]:
     """
-    Escanea la carpeta features y devuelve los routers y nombres de módulos encontrados.
-
+    Escanea una ruta de features específica y devuelve los routers y nombres de módulos encontrados.
+    
     Args:
-        base_path: La ruta base del proyecto, de donde se cargará el directorio 'features'.
-        features_dir: Nombre de la carpeta de features.
+        features_path: Ruta en formato punto (ej: "customers.features")
         router_var_name: Nombre de la variable router a buscar en cada módulo.
 
     Returns:
@@ -25,44 +24,65 @@ def get_feature_modules(
     routers = []
     module_names = []
 
-    # Se usa la ruta base proporcionada en lugar de intentar inferirla
-    features_path = os.path.join(base_path, features_dir)
+    # Convertir la notación de puntos a ruta de sistema
+    
 
-    if not os.path.exists(features_path):
-        print(f"Advertencia: El directorio {features_path} no existe")
+    # Buscar la ruta física del directorio features
+    base_path = None
+
+    # Opción 1: desde __main__
+    import __main__
+    if hasattr(__main__, '__file__') and __main__.__file__:
+        main_dir = os.path.dirname(os.path.abspath(__main__.__file__))
+        potential_path = os.path.join(main_dir, features_path)
+        if os.path.exists(potential_path):
+            base_path = potential_path    
+    
+    if not base_path:
+        print(f"Error: No se pudo encontrar el directorio de features: {features_path}")
         return [], []
 
-    # Obtener el nombre del paquete base a partir de la ruta
-    # Esto asume que el nombre del directorio es el nombre del paquete
-    package_prefix = os.path.basename(base_path)
+    print(f"Escaneando features en: {base_path}")    
 
-    pattern = os.path.join(features_path, "**", "*.py")
+    # Buscar todos los archivos Python en el directorio features
+    pattern = os.path.join(base_path, "**", "*.py")
     python_files = glob.glob(pattern, recursive=True)
 
     for file_path in python_files:
         filename = os.path.basename(file_path)
+
+        # Ignorar __init__.py, tests, etc.
         if filename.startswith("__") or filename.startswith("test_"):
             continue
 
         try:
-            # Construir el nombre completo del módulo
+            # Ruta relativa desde base_path
             rel_path = os.path.relpath(file_path, base_path)
             module_path_parts = rel_path.replace(os.sep, '.').split('.')[:-1]
-            full_module_name = f"{package_prefix}.{'.'.join(module_path_parts)}"
-            
+            full_module_name = f"{features_path}.{'.'.join(module_path_parts)}"
+
+            print(f"Intentando importar: {full_module_name} desde {file_path}")
+
             spec = importlib.util.spec_from_file_location(full_module_name, file_path)
 
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
+                sys.modules[full_module_name] = module
                 spec.loader.exec_module(module)
-                
+
                 module_names.append(full_module_name)
 
                 if hasattr(module, router_var_name):
                     routers.append(getattr(module, router_var_name))
+                    print(f"✓ Router encontrado en {full_module_name}")
+                else:
+                    print(f"⚠ No se encontró '{router_var_name}' en {full_module_name}")
 
         except Exception as e:
-            print(f"Error al importar {file_path}: {e}")
+            print(f"✗ Error al importar {file_path}: {e}")
             continue
+
+    print(f"Total de routers encontrados: {len(routers)}")
+    print(f"Total de módulos: {len(module_names)}")
 
     return routers, module_names
