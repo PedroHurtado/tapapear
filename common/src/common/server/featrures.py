@@ -34,7 +34,8 @@ def get_feature_modules(
     import __main__
     if hasattr(__main__, '__file__') and __main__.__file__:
         main_dir = os.path.dirname(os.path.abspath(__main__.__file__))
-        potential_path = os.path.join(main_dir, features_path)
+        features_path_fs = features_path.replace(".", os.sep)
+        potential_path = os.path.join(main_dir, features_path_fs)
         if os.path.exists(potential_path):
             base_path = potential_path    
     

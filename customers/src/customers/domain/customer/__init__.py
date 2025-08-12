@@ -1,3 +1,1 @@
-from .customer import Customer, TaxType
-
-__all__ = ["Customer", "TaxType"]
+from .customer import Customer, TaxType, ClientStatus 

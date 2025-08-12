@@ -10,6 +10,7 @@ from google.cloud import firestore
 from google.cloud.firestore import AsyncClient, AsyncTransaction, AsyncDocumentReference
 from google.oauth2.service_account import Credentials
 from .documentnotfound import DocumentNotFound
+from common.inflect import plural
 from typing import (
     Any,
     Callable,
@@ -229,7 +230,7 @@ class RepositoryFirestore(Generic[T]):
             )
 
         self._cls = cls
-        self._collection_name = cls.__name__.lower()
+        self._collection_name = plural(cls.__name__.lower())
         self._db = db or get_db()
 
     def __get_collection(self):
@@ -248,7 +249,7 @@ class RepositoryFirestore(Generic[T]):
         else:
             await doc_ref.create(data_with_meta)
 
-        logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
+        logger.debug(f"📝 Documento creado en {self._collection_name}: {doc_ref.id}")
 
     async def get(self, id: UUID, message: str = None) -> T:
 
@@ -284,7 +285,7 @@ class RepositoryFirestore(Generic[T]):
             await doc_ref.update(update_data)
 
         logger.debug(
-            f"📝 Documento actualizado en {self.collection_name}: {document.id}"
+            f"📝 Documento actualizado en {self._collection_name}: {document.id}"
         )
 
     async def delete(self, doc: T) -> None:
@@ -299,7 +300,7 @@ class RepositoryFirestore(Generic[T]):
             # Operación directa
             await doc_ref.delete()
 
-        logger.debug(f"🗑️ Documento eliminado de {self.collection_name}: {doc.id}")
+        logger.debug(f"🗑️ Documento eliminado de {self._collection_name}: {doc.id}")
 
     async def find_by_field(
         self, field: str, value: Any, limit: Optional[int] = None

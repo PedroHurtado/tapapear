@@ -208,8 +208,9 @@ class Remove(Generic[T], Get[T], metaclass=RepoMeta):
 # Esta clase NO debe tener metaclass, para que __init__ sea visible
 class InjectsRepo:
     def __init__(self, repo: RepositoryProtocol, mapper:Mapper):
-        if not isinstance(repo, RepositoryProtocol):
-            raise TypeError(f"{repo!r} does not implement RepositoryProtocol")
+        #if not isinstance(repo, RepositoryProtocol):
+        #    raise TypeError(f"{repo!r} does not implement RepositoryProtocol")
+        
         if not isinstance(mapper, Mapper):
             raise TypeError(f"{mapper!r} is not a Mapper")
         self._repo = repo

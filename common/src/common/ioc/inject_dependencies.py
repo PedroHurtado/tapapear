@@ -1,3 +1,3 @@
-from dependency_injector.wiring import inject
-def inject_dependencies(func):    
-    return inject(func)
+from dependency_injector.wiring import inject as _inject
+def inject(func):    
+    return _inject(func)

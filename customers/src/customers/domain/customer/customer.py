@@ -101,7 +101,7 @@ class Customer(BaseEntity):
             id=id,
             name=name,
             country=country,
-            addres=address,
+            address=address,
             card=card,
             expirtion_card=expirtion_card,
             cvc=cvc,

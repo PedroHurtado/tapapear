@@ -9,7 +9,8 @@ from .firestore import(
     transactional,
     DocumentNotFound,
     RepositoryFirestore,    
-    initialize_database
+    initialize_database,
+    get_db
 )
 from .repository import (
     Get,
