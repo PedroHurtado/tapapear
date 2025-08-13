@@ -262,7 +262,7 @@ class Response1(BaseModel):
     id: str
 
 
-@app.get("/public", summary="El perro de San Roque no tiene Rabo")
+@app.post("/public", summary="El perro de San Roque no tiene Rabo")
 @allow_anonymous
 async def public_endpoint(req: Request1) -> Response1:
     return Response1(id=req.id)
@@ -308,4 +308,4 @@ async def manual_security_endpoint():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)
