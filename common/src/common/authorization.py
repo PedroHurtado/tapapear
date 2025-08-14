@@ -4,11 +4,12 @@ from fastapi.security import HTTPBearer
 from fastapi.routing import APIRoute
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import ValidationException
 
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from contextvars import ContextVar
 from contextlib import asynccontextmanager
-from typing import Dict, Optional, Callable, Any
+from typing import Dict, Optional, Callable, Any, Sequence, Union
 from functools import wraps
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
@@ -83,11 +84,11 @@ def authorize(roles: Optional[list[str]] = None):
 
 
 class ErrorResponse(BaseModel):
-    timestamp: datetime
+    timestamp:str =  Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec='milliseconds'))
     status: int
     error: str
     exception: Optional[str] = None
-    message: str
+    message: Union[str|Sequence[Any]]
     path: str
 
 
@@ -173,12 +174,12 @@ class SendInterceptor:
         elif self.status_code == 401:
             exception_name = "UnauthorizedException"
         elif self.status_code == 404:
-            exception_name = "NotFoundException"
+            exception_name = "NotFoundException"        
         elif self.status_code == 422:
             exception_name = "ValidationException"
 
         response = ErrorResponse(
-            timestamp=datetime.now(timezone.utc),
+            
             status=self.status_code,
             error=self._get_error_name_from_status(self.status_code),
             exception=exception_name,
@@ -186,8 +187,7 @@ class SendInterceptor:
             path=self.request_path
         )
 
-        data = response.model_dump()
-        data['timestamp'] = data['timestamp'].isoformat(timespec='milliseconds')
+        data = response.model_dump()        
         return json.dumps(data)
 
     def _get_error_name_from_status(self, status_code: int) -> str:
@@ -196,6 +196,8 @@ class SendInterceptor:
             401: "Unauthorized Error",
             403: "Forbidden Error",
             404: "Not Found Error",
+            405: "Method Not Allowed",
+            415: "Unsupported Media Type",
             422: "Validation Error",
             500: "Internal Server Error",
         }
@@ -205,15 +207,14 @@ class SendInterceptor:
 def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
     """Maneja las excepciones HTTP y devuelve una respuesta personalizada"""
     response = ErrorResponse(
-        timestamp=datetime.now(timezone.utc),
+        
         status=exc.status_code,
         error=f"HTTP {exc.status_code} Error",
         exception="HTTPException",
         message=str(exc.detail),
         path=request.url.path,
     )
-    data = response.model_dump()
-    data['timestamp'] = data['timestamp'].isoformat(timespec='milliseconds')
+    data = response.model_dump()    
     return JSONResponse(status_code=exc.status_code, content=data)
 
 
@@ -236,12 +237,23 @@ class ErrorHandlerMiddleware:
             # Manejamos excepciones que no fueron procesadas por FastAPI
             json_response = handle_http_exception(request, exc)
             await json_response(scope, receive, send)
+        except ValidationException as exc:
+            response = ErrorResponse(                
+                status=422,
+                error="Validation Error",
+                exception=exc.__class__.__name__,
+                message=exc.errors(),
+                path=request.url.path,
+            )
+
+            data = response.model_dump()            
+            json_response = JSONResponse(status_code=422, content=data)
+            await json_response(scope, receive, send)
 
         except Exception as exc:
             # Manejamos excepciones no HTTP
             logger.error(f"Unhandled exception: {exc}", exc_info=True)
-            response = ErrorResponse(
-                timestamp=datetime.now(timezone.utc),
+            response = ErrorResponse(                
                 status=500,
                 error="Internal Server Error",
                 exception=exc.__class__.__name__,
@@ -249,12 +261,14 @@ class ErrorHandlerMiddleware:
                 path=request.url.path,
             )
 
-            data = response.model_dump()
-            data['timestamp'] = data['timestamp'].isoformat(timespec='milliseconds')
-
+            data = response.model_dump()          
             json_response = JSONResponse(status_code=500, content=data)
             await json_response(scope, receive, send)
 
+
+from datetime import datetime, timezone
+from fastapi import Request, HTTPException
+from starlette.types import ASGIApp, Scope, Receive, Send
 
 class AuthMiddleware:
     """Middleware para inyectar el Principal en el contexto."""
@@ -269,6 +283,20 @@ class AuthMiddleware:
 
         request = Request(scope, receive=receive)
         method, path = request.method.upper(), request.url.path
+
+        # Comprobar si la ruta existe y si el método es válido
+        route_found = False
+        allowed_methods = set()
+
+        for route in request.app.router.routes:
+            if hasattr(route, "path_regex") and route.path_regex.match(path):
+                route_found = True
+                allowed_methods.update(route.methods or set())
+
+        # Si no existe la ruta o el método no está permitido → dejar que otro middleware maneje 404/405
+        if not route_found or (method not in allowed_methods):
+            await self.app(scope, receive, send)
+            return
 
         # Extraer token del header Authorization
         token = None
@@ -292,34 +320,20 @@ class AuthMiddleware:
             and route_key not in _allow_anonymous_routes
             and principal is None
         ):
-            error_response = ErrorResponse(
-                timestamp=datetime.now(timezone.utc),
-                status=401,
-                error="Unauthorized Error",
-                exception="HTTPException",
-                message="Not authenticated",
-                path=path,
-            )
-
-            data = error_response.model_dump()
-            data['timestamp'] = data['timestamp'].isoformat(timespec='milliseconds')
-
-            response = JSONResponse(status_code=401, content=data)
-            await response(scope, receive, send)
-            return
+            raise HTTPException(status_code=401, detail="Not authenticated")
 
         # Establecer el principal en el contexto antes de continuar
         token = principal_ctx.set(principal)
         try:
             await self.app(scope, receive, send)
         finally:
-            # Limpiar el contexto
             principal_ctx.set(None)
 
 
 # ============================================================
 # OpenAPI personalizado
 # ============================================================
+
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -331,81 +345,147 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Verificar si hay middleware de autenticación
     has_auth_middleware = any(
         hasattr(middleware, 'cls') and middleware.cls is AuthMiddleware
         for middleware in app.user_middleware
     )
 
-    if has_auth_middleware:
-        openapi_schema.setdefault("components", {})
+    def ensure_validation_schemas():
+        """Asegura que ValidationError y ValidationErrorArray estén definidos."""
+        schemas = openapi_schema["components"].setdefault("schemas", {})
 
-        # Security
+        if "ValidationError" not in schemas:
+            schemas["ValidationError"] = {
+                "type": "object",
+                "title": "ValidationError",
+                "properties": {
+                    "loc": {
+                        "type": "array",
+                        "items": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "integer"}
+                            ]
+                        }
+                    },
+                    "msg": {"type": "string"},
+                    "type": {"type": "string"}
+                },
+                "required": ["loc", "msg", "type"],
+                "example": {
+                    "loc": ["body", "email"],
+                    "msg": "field required",
+                    "type": "value_error.missing"
+                }
+            }
+
+        if "ValidationErrorArray" not in schemas:
+            schemas["ValidationErrorArray"] = {
+                "type": "array",
+                "title": "ArrayOfValidationError",
+                "items": {"$ref": "#/components/schemas/ValidationError"}
+            }
+
+    openapi_schema.setdefault("components", {})
+
+    if has_auth_middleware:
         openapi_schema["components"]["securitySchemes"] = {
             "HTTPBearer": {"type": "http", "scheme": "bearer"}
         }
 
-        # Schema común para errores
-        openapi_schema["components"].setdefault("schemas", {})["ErrorResponse"] = {
+        ensure_validation_schemas()
+
+        openapi_schema["components"]["schemas"]["ErrorResponse"] = {
             "type": "object",
             "properties": {
-                "timestamp": {"type": "string"},
+                "timestamp": {"type": "string", "format": "date-time"},
                 "status": {"type": "integer"},
                 "error": {"type": "string"},
-                "exception": {"type": "string"},
-                "message": {"type": "string"},
+                "exception": {"type": "string", "nullable": True},
+                "message": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"$ref": "#/components/schemas/ValidationErrorArray"}
+                    ],
+                    "description": "Error message - either a simple string or array of validation errors"
+                },
                 "path": {"type": "string"},
             },
+            "required": ["timestamp", "status", "error", "message", "path"]
         }
 
-        # Respuestas de error usando el schema
         error_responses = {
             "UnauthorizedError": {
                 "description": "Access token is missing or invalid",
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": "#/components/schemas/ErrorResponse"}
-                    }
-                },
+                "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
             },
             "ForbiddenError": {
                 "description": "Insufficient permissions",
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": "#/components/schemas/ErrorResponse"}
-                    }
-                },
+                "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+            },
+            "ValidationError": {
+                "description": "Validation error",
+                "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
             },
         }
         openapi_schema["components"].setdefault("responses", {}).update(error_responses)
 
+    else:
+        ensure_validation_schemas()
+
+        openapi_schema["components"]["schemas"]["ErrorResponse"] = {
+            "type": "object",
+            "properties": {
+                "timestamp": {"type": "string", "format": "date-time"},
+                "status": {"type": "integer"},
+                "error": {"type": "string"},
+                "exception": {"type": "string", "nullable": True},
+                "message": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"$ref": "#/components/schemas/ValidationErrorArray"}
+                    ]
+                },
+                "path": {"type": "string"},
+            },
+            "required": ["timestamp", "status", "error", "message", "path"]
+        }
+
+        if "HTTPValidationError" in openapi_schema["components"]["schemas"]:
+            del openapi_schema["components"]["schemas"]["HTTPValidationError"]
+
+        openapi_schema["components"].setdefault("responses", {})["ValidationError"] = {
+            "description": "Validation error",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
+        }
+
     for path, path_item in openapi_schema["paths"].items():
         if any((path, m) in DOCS_PATHS for m in ["GET", "HEAD"]):
             continue
-
         for method, operation in path_item.items():
-            if method.upper() in {
-                "GET",
-                "POST",
-                "PUT",
-                "DELETE",
-                "PATCH",
-                "OPTIONS",
-                "HEAD",
-            }:
+            if method.upper() in {"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}:
                 route_key = (path, method.upper())
-
+                if "responses" in operation and "422" in operation["responses"]:
+                    operation["responses"]["422"] = {"$ref": "#/components/responses/ValidationError"}
                 if route_key not in _allow_anonymous_routes and has_auth_middleware:
                     operation["security"] = [{"HTTPBearer": []}]
                     operation.setdefault("responses", {})
-                    operation["responses"]["401"] = {
-                        "$ref": "#/components/responses/UnauthorizedError"
-                    }
-
+                    operation["responses"]["401"] = {"$ref": "#/components/responses/UnauthorizedError"}
                     if route_key in _authorize_routes:
-                        operation["responses"]["403"] = {
-                            "$ref": "#/components/responses/ForbiddenError"
-                        }
+                        operation["responses"]["403"] = {"$ref": "#/components/responses/ForbiddenError"}
+
+    if "components" in openapi_schema and "schemas" in openapi_schema["components"]:
+        if "HTTPValidationError" in openapi_schema["components"]["schemas"]:
+            del openapi_schema["components"]["schemas"]["HTTPValidationError"]
+
+        # 🔹 Mover ErrorResponse, ValidationError y ValidationErrorArray al final
+        schemas = openapi_schema["components"]["schemas"]
+        reordered = {k: v for k, v in schemas.items()
+                     if k not in ("ErrorResponse", "ValidationError", "ValidationErrorArray")}
+        for key in ("ErrorResponse", "ValidationError", "ValidationErrorArray"):
+            if key in schemas:
+                reordered[key] = schemas[key]
+        openapi_schema["components"]["schemas"] = reordered
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -507,8 +587,9 @@ app = FastAPI(
 app.openapi = custom_openapi
 
 # Agregar middlewares en el orden correcto
-app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+
 
 class Request1(BaseModel):
     id: int
