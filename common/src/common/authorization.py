@@ -4,6 +4,7 @@ from fastapi.security import HTTPBearer
 from fastapi.routing import APIRoute
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel
 from contextvars import ContextVar
 from contextlib import asynccontextmanager
@@ -510,11 +511,11 @@ app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
 
 class Request1(BaseModel):
-    id: str
+    id: int
 
 
 class Response1(BaseModel):
-    id: str
+    id: int
 
 
 
