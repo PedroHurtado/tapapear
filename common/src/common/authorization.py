@@ -332,32 +332,38 @@ def custom_openapi():
 
     # Verificar si hay middleware de autenticación
     has_auth_middleware = any(
-        hasattr(middleware, 'cls') and middleware.cls is AuthMiddleware 
+        hasattr(middleware, 'cls') and middleware.cls is AuthMiddleware
         for middleware in app.user_middleware
     )
 
     if has_auth_middleware:
         openapi_schema.setdefault("components", {})
+
+        # Security
         openapi_schema["components"]["securitySchemes"] = {
             "HTTPBearer": {"type": "http", "scheme": "bearer"}
         }
 
+        # Schema común para errores
+        openapi_schema["components"].setdefault("schemas", {})["ErrorResponse"] = {
+            "type": "object",
+            "properties": {
+                "timestamp": {"type": "string"},
+                "status": {"type": "integer"},
+                "error": {"type": "string"},
+                "exception": {"type": "string"},
+                "message": {"type": "string"},
+                "path": {"type": "string"},
+            },
+        }
+
+        # Respuestas de error usando el schema
         error_responses = {
             "UnauthorizedError": {
                 "description": "Access token is missing or invalid",
                 "content": {
                     "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "timestamp": {"type": "string"},
-                                "status": {"type": "integer"},
-                                "error": {"type": "string"},
-                                "exception": {"type": "string"},
-                                "message": {"type": "string"},
-                                "path": {"type": "string"},
-                            },
-                        }
+                        "schema": {"$ref": "#/components/schemas/ErrorResponse"}
                     }
                 },
             },
@@ -365,17 +371,7 @@ def custom_openapi():
                 "description": "Insufficient permissions",
                 "content": {
                     "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "timestamp": {"type": "string"},
-                                "status": {"type": "integer"},
-                                "error": {"type": "string"},
-                                "exception": {"type": "string"},
-                                "message": {"type": "string"},
-                                "path": {"type": "string"},
-                            },
-                        }
+                        "schema": {"$ref": "#/components/schemas/ErrorResponse"}
                     }
                 },
             },
@@ -466,16 +462,36 @@ def setup_security_dependencies(app: FastAPI):
 # ============================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    
     setup_security_dependencies(app)
-    _allow_anonymous_routes.update(DOCS_PATHS)
-    
-    # Debug: mostrar las rutas configuradas
-    logger.info("=== CONFIGURACIÓN DE RUTAS ===")
-    logger.info(f"Rutas anónimas: {_allow_anonymous_routes}")
-    logger.info(f"Rutas con autorización: {_authorize_routes}")
-    logger.info("==============================")
-    
+    _allow_anonymous_routes.update(DOCS_PATHS) 
+
     yield
+
+#=============================================================
+# Genera los códigos de error de la app para integrarlos en openapi
+#=============================================================
+def build_error_responses(*codes: int) -> Dict[int, dict]:
+    """Genera un diccionario de responses para FastAPI
+    solo aceptando 400, 404 y 409.
+    """
+    allowed_codes = {
+        400: "Bad Request",
+        404: "Not Found",
+        409: "Conflict",
+    }
+
+    result = {}
+    for code in codes:
+        if code not in allowed_codes:
+            raise ValueError(
+                f"Código {code} no permitido. Solo 400, 404 o 409."
+            )
+        result[code] = {
+            "description": allowed_codes[code],
+            "model": ErrorResponse
+        }
+    return result
 
 
 # ============================================================
@@ -493,7 +509,6 @@ app.openapi = custom_openapi
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
 
-
 class Request1(BaseModel):
     id: str
 
@@ -502,8 +517,13 @@ class Response1(BaseModel):
     id: str
 
 
+
+
+
+
 @app.post("/public", 
-          summary="El perro de San Roque no tiene Rabo",          
+          summary="El perro de San Roque no tiene Rabo",   
+          responses=  build_error_responses(400,409)     
 )
 @allow_anonymous
 async def public_endpoint(req: Request1) -> Response1:
