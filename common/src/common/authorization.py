@@ -14,6 +14,7 @@ from functools import wraps
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from datetime import datetime, timezone
+from .ioc import container,component,ProviderType
 import json
 import logging
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 principal_ctx: ContextVar[Optional["Principal"]] = ContextVar("principal", default=None)
 _allow_anonymous_routes: set[tuple[str, str]] = set()
 _authorize_routes: set[tuple[str, str]] = set()
+
 
 security_scheme = HTTPBearer(auto_error=False)
 
@@ -43,9 +45,22 @@ DOCS_PATHS: set[tuple[str, str]] = {
 }
 
 
+class PrincipalNotSetError(Exception):
+    """Excepción lanzada cuando se intenta acceder al Principal pero no está establecido en el contexto."""
+    pass
+
+def get_current_principal() -> "Principal":
+    """Factory function que obtiene el Principal actual del ContextVar."""
+    principal = principal_ctx.get()
+    if principal is None:
+        raise PrincipalNotSetError("No hay un Principal establecido en el contexto actual")
+    return principal
+
+
 # ============================================================
 # Modelos y clases auxiliares
 # ============================================================
+@component(provider_type=ProviderType.FACTORY,factory=get_current_principal)
 class Principal:
     def __init__(self, username: str, roles: list[str]):
         self.username = username
@@ -266,10 +281,6 @@ class ErrorHandlerMiddleware:
             await json_response(scope, receive, send)
 
 
-from datetime import datetime, timezone
-from fastapi import Request, HTTPException
-from starlette.types import ASGIApp, Scope, Receive, Send
-
 class AuthMiddleware:
     """Middleware para inyectar el Principal en el contexto."""
 
@@ -299,19 +310,17 @@ class AuthMiddleware:
             return
 
         # Extraer token del header Authorization
-        token = None
+        auth_token = None
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
+            auth_token = auth_header.split(" ", 1)[1]
 
         # Autenticar basado en el token
         principal = None
-        if token == "admin":
+        if auth_token == "admin":
             principal = Principal("admin", ["admin"])
-        elif token == "user":
+        elif auth_token == "user":
             principal = Principal("user", ["user"])
-
-        principal_ctx.set(principal)
 
         # Verificar si la ruta requiere autenticación
         route_key = (path, method)
@@ -322,18 +331,18 @@ class AuthMiddleware:
         ):
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        # Establecer el principal en el contexto antes de continuar
-        token = principal_ctx.set(principal)
+        # Establecer el principal en el contexto una sola vez
+        context_token = principal_ctx.set(principal)
         try:
             await self.app(scope, receive, send)
         finally:
-            principal_ctx.set(None)
+            # Resetear correctamente el contexto usando el token
+            principal_ctx.reset(context_token)
 
 
 # ============================================================
 # OpenAPI personalizado
 # ============================================================
-
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -351,7 +360,7 @@ def custom_openapi():
     )
 
     def ensure_validation_schemas():
-        """Asegura que ValidationError y ValidationErrorArray estén definidos."""
+        """Asegura que ValidationError esté definido."""
         schemas = openapi_schema["components"].setdefault("schemas", {})
 
         if "ValidationError" not in schemas:
@@ -379,13 +388,6 @@ def custom_openapi():
                 }
             }
 
-        if "ValidationErrorArray" not in schemas:
-            schemas["ValidationErrorArray"] = {
-                "type": "array",
-                "title": "ArrayOfValidationError",
-                "items": {"$ref": "#/components/schemas/ValidationError"}
-            }
-
     openapi_schema.setdefault("components", {})
 
     if has_auth_middleware:
@@ -405,7 +407,10 @@ def custom_openapi():
                 "message": {
                     "anyOf": [
                         {"type": "string"},
-                        {"$ref": "#/components/schemas/ValidationErrorArray"}
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/ValidationError"}
+                        }
                     ],
                     "description": "Error message - either a simple string or array of validation errors"
                 },
@@ -443,7 +448,10 @@ def custom_openapi():
                 "message": {
                     "anyOf": [
                         {"type": "string"},
-                        {"$ref": "#/components/schemas/ValidationErrorArray"}
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/ValidationError"}
+                        }
                     ]
                 },
                 "path": {"type": "string"},
@@ -477,12 +485,11 @@ def custom_openapi():
     if "components" in openapi_schema and "schemas" in openapi_schema["components"]:
         if "HTTPValidationError" in openapi_schema["components"]["schemas"]:
             del openapi_schema["components"]["schemas"]["HTTPValidationError"]
-
-        # 🔹 Mover ErrorResponse, ValidationError y ValidationErrorArray al final
+        
         schemas = openapi_schema["components"]["schemas"]
         reordered = {k: v for k, v in schemas.items()
-                     if k not in ("ErrorResponse", "ValidationError", "ValidationErrorArray")}
-        for key in ("ErrorResponse", "ValidationError", "ValidationErrorArray"):
+                     if k not in ("ErrorResponse", "ValidationError")}
+        for key in ("ErrorResponse", "ValidationError"):
             if key in schemas:
                 reordered[key] = schemas[key]
         openapi_schema["components"]["schemas"] = reordered

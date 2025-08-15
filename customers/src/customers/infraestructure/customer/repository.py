@@ -1,7 +1,7 @@
 from common.infraestructure.firestore import RepositoryFirestore, get_db
 from common.infraestructure.document import Document
 from common.ioc import component
-from common import get_mapper
+from common.mapper import get_mapper
 from customers.domain.customer import Customer as CustomerDomain
 
 

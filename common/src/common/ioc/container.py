@@ -19,13 +19,23 @@ class AppContainer(containers.DynamicContainer):
             cls = meta["cls"]
             provider_type = meta["provider_type"]
 
-            sig = inspect.signature(cls.__init__)
             kwargs = {}
             
-            for param in sig.parameters.values():
-                if param.name == "self":
-                    continue
-                    
+            # Determinar cómo analizar las dependencias según el tipo
+            if inspect.isclass(cls):
+                # Es una clase - analizar __init__
+                sig = inspect.signature(cls.__init__)
+                param_iter = (param for param in sig.parameters.values() if param.name != "self")
+            elif callable(cls):
+                # Es una función - analizar directamente
+                sig = inspect.signature(cls)
+                param_iter = sig.parameters.values()
+            else:
+                # Es un resource (valor directo) - no tiene dependencias
+                param_iter = []
+            
+            # Procesar parámetros para encontrar dependencias
+            for param in param_iter:
                 ann = param.annotation
                 if ann != inspect.Parameter.empty:
                     dep_key = get_component_key(ann)
@@ -41,7 +51,11 @@ class AppContainer(containers.DynamicContainer):
                 case ProviderType.FACTORY:
                     provider = providers.Factory(cls, **kwargs)
                 case ProviderType.RESOURCE:
+                    # Resources siempre son clases o funciones que manejan ciclo de vida
                     provider = providers.Resource(cls, **kwargs)
+                case ProviderType.OBJECT:
+                    # Objects son valores directos, no necesitan kwargs
+                    provider = providers.Object(cls)
                 case _:
                     raise ValueError(f"Unsupported provider type: {provider_type}")
 
