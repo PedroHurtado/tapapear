@@ -14,7 +14,7 @@ from functools import wraps
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from datetime import datetime, timezone
-from .ioc import container,component,ProviderType
+from common.ioc import container,component,ProviderType, inject, deps
 import json
 import logging
 
@@ -65,6 +65,12 @@ class Principal:
     def __init__(self, username: str, roles: list[str]):
         self.username = username
         self.roles = roles
+
+@component(provider_type=ProviderType.FACTORY)
+class Service:
+    def __init__(self, principal:Principal):
+        print(principal.username)
+        pass
 
 
 def allow_anonymous(func: Callable):
@@ -549,11 +555,11 @@ def setup_security_dependencies(app: FastAPI):
 # Ciclo de vida
 # ============================================================
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    
+async def lifespan(app: FastAPI):    
     setup_security_dependencies(app)
     _allow_anonymous_routes.update(DOCS_PATHS) 
-
+    module_names = [__name__]
+    container.wire(modules=module_names)
     yield
 
 #=============================================================
@@ -629,7 +635,9 @@ async def private_endpoint():
 
 @app.get("/admin")
 @authorize(["admin"])
-async def admin_endpoint():
+@inject
+#service: Service = deps(Service)
+async def admin_endpoint(service:Service=deps(Service)):
     return {"message": "Zona admin"}
 
 
@@ -668,6 +676,6 @@ async def manual_security_endpoint():
 app.exception_handlers.clear()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     import uvicorn
     uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)

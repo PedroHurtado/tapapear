@@ -21,17 +21,14 @@ class AppContainer(containers.DynamicContainer):
 
             kwargs = {}
             
-            # Determinar cómo analizar las dependencias según el tipo
-            if inspect.isclass(cls):
-                # Es una clase - analizar __init__
+            
+            if inspect.isclass(cls):                
                 sig = inspect.signature(cls.__init__)
                 param_iter = (param for param in sig.parameters.values() if param.name != "self")
-            elif callable(cls):
-                # Es una función - analizar directamente
+            elif callable(cls):                
                 sig = inspect.signature(cls)
                 param_iter = sig.parameters.values()
-            else:
-                # Es un resource (valor directo) - no tiene dependencias
+            else:                
                 param_iter = []
             
             # Procesar parámetros para encontrar dependencias
@@ -50,23 +47,20 @@ class AppContainer(containers.DynamicContainer):
                     provider = providers.Singleton(cls, **kwargs)
                 case ProviderType.FACTORY:
                     provider = providers.Factory(cls, **kwargs)
-                case ProviderType.RESOURCE:
-                    # Resources siempre son clases o funciones que manejan ciclo de vida
+                case ProviderType.RESOURCE:                    
                     provider = providers.Resource(cls, **kwargs)
-                case ProviderType.OBJECT:
-                    # Objects son valores directos, no necesitan kwargs
+                case ProviderType.OBJECT:                    
                     provider = providers.Object(cls)
                 case _:
                     raise ValueError(f"Unsupported provider type: {provider_type}")
 
-            # Asignar con nombre compatible (reemplazar puntos por guiones bajos)           
+                      
             setattr(self, key, provider)
             meta["provider"] = provider
 
         self._built = True
 
-    def wire(self, modules: Iterable[str]):
-        """Wire modules by name"""
+    def wire(self, modules: Iterable[str]):        
         if not self._built:
             self._build()
         super().wire(modules=modules)
