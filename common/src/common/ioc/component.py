@@ -1,9 +1,6 @@
-# common/ioc/components.py
-from typing import Type, Dict, Any, Callable, Optional
-
-component_registry: Dict[str, Dict[str, Any]] = {}
-
+from typing import Type, Callable, Optional
 from enum import Enum
+from common.context import get_app_context
 
 
 class ProviderType(Enum):
@@ -16,13 +13,13 @@ class ProviderType(Enum):
 def get_component_key(cls: Type) -> str:
     return f"{cls.__module__}.{cls.__name__}".replace(".", "_")
 
-
 def component(
     _cls=None,
     *,
     provider_type: ProviderType = ProviderType.SINGLETON,
     factory: Optional[Callable] = None,
 ):
+    component_registry =get_app_context().component_registry
     def wrap(cls):
         key = get_component_key(cls)
         if key in component_registry:

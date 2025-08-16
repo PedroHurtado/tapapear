@@ -3,4 +3,7 @@ from .featrures import (
 )
 from .appbuilder import AppBuilder
 
-__all__ = ["get_feature_modules","AppBuilder"]
+__all__ = [
+    "get_feature_modules",    
+    "AppBuilder"
+]

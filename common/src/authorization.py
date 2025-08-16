@@ -14,9 +14,35 @@ from functools import wraps
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from datetime import datetime, timezone
-from common.ioc import container,component,ProviderType, inject, deps
+from common.ioc import AppContainer,component,ProviderType, inject, deps
+from common.context import set_app_context, Context
 import json
 import logging
+
+
+
+set_app_context(Context())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):    
+
+    module_names = [__name__]  
+    container = AppContainer()
+    container.wire(module_names)    
+
+    setup_security_dependencies(app)
+    _allow_anonymous_routes.update(DOCS_PATHS) 
+          
+    yield
+
+    
+# create app
+app = FastAPI(
+    lifespan=lifespan,
+    title="Mi API con Auth",
+    description="Ejemplo con autenticación automática",
+    version="1.0.0",
+)
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -26,9 +52,39 @@ logger = logging.getLogger(__name__)
 # Constantes y estado global
 # ============================================================
 principal_ctx: ContextVar[Optional["Principal"]] = ContextVar("principal", default=None)
+
 _allow_anonymous_routes: set[tuple[str, str]] = set()
 _authorize_routes: set[tuple[str, str]] = set()
 
+def allow_anonymous(func: Callable):
+    """Marca una ruta para permitir acceso sin autenticación."""
+
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **kwargs)
+
+    wrapper.__allow_anonymous__ = True
+    return wrapper
+
+
+def authorize(roles: Optional[list[str]] = None):
+    """Marca una ruta que requiere autenticación y, opcionalmente, roles."""
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            principal = principal_ctx.get()
+            if principal is None:
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            if roles and not any(r in principal.roles for r in roles):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            return await func(*args, **kwargs)
+
+        wrapper.__authorize_roles__ = roles or []
+        wrapper.__has_authorize__ = True
+        return wrapper
+
+    return decorator
 
 security_scheme = HTTPBearer(auto_error=False)
 
@@ -72,35 +128,7 @@ class Service:
         print(principal)
 
 
-def allow_anonymous(func: Callable):
-    """Marca una ruta para permitir acceso sin autenticación."""
 
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        return await func(*args, **kwargs)
-
-    wrapper.__allow_anonymous__ = True
-    return wrapper
-
-
-def authorize(roles: Optional[list[str]] = None):
-    """Marca una ruta que requiere autenticación y, opcionalmente, roles."""
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            principal = principal_ctx.get()
-            if principal is None:
-                raise HTTPException(status_code=401, detail="Not authenticated")
-            if roles and not any(r in principal.roles for r in roles):
-                raise HTTPException(status_code=403, detail="Forbidden")
-            return await func(*args, **kwargs)
-
-        wrapper.__authorize_roles__ = roles or []
-        wrapper.__has_authorize__ = True
-        return wrapper
-
-    return decorator
 
 
 class ErrorResponse(BaseModel):
@@ -550,16 +578,7 @@ def setup_security_dependencies(app: FastAPI):
                 route.dependencies.append(Security(security_scheme))
 
 
-# ============================================================
-# Ciclo de vida
-# ============================================================
-@asynccontextmanager
-async def lifespan(app: FastAPI):    
-    setup_security_dependencies(app)
-    _allow_anonymous_routes.update(DOCS_PATHS) 
-    module_names = [__name__]
-    container.wire(modules=module_names)
-    yield
+
 
 #=============================================================
 # Genera los códigos de error de la app para integrarlos en openapi
@@ -590,12 +609,7 @@ def build_error_responses(*codes: int) -> Dict[int, dict]:
 # ============================================================
 # App y endpoints de ejemplo
 # ============================================================
-app = FastAPI(
-    lifespan=lifespan,
-    title="Mi API con Auth",
-    description="Ejemplo con autenticación automática",
-    version="1.0.0",
-)
+
 app.openapi = custom_openapi
 
 # Agregar middlewares en el orden correcto
