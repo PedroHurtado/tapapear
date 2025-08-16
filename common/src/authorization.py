@@ -9,7 +9,7 @@ from fastapi.exceptions import ValidationException
 from pydantic import BaseModel,Field
 from contextvars import ContextVar
 from contextlib import asynccontextmanager
-from typing import Dict, Optional, Callable, Any, Sequence, Union
+from typing import Dict, Optional, Callable, Any, Sequence, Union, List
 from functools import wraps
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
@@ -61,16 +61,15 @@ def get_current_principal() -> "Principal":
 # Modelos y clases auxiliares
 # ============================================================
 @component(provider_type=ProviderType.FACTORY,factory=get_current_principal)
-class Principal:
-    def __init__(self, username: str, roles: list[str]):
-        self.username = username
-        self.roles = roles
+class Principal(BaseModel):
+    username:str
+    roles:List[str]    
 
-@component(provider_type=ProviderType.FACTORY)
-class Service:
-    def __init__(self, principal:Principal):
-        print(principal.username)
-        pass
+@component
+class Service:    
+    @inject
+    def __call__(self, principal:Principal=deps(Principal)):
+        print(principal)
 
 
 def allow_anonymous(func: Callable):
@@ -324,9 +323,9 @@ class AuthMiddleware:
         # Autenticar basado en el token
         principal = None
         if auth_token == "admin":
-            principal = Principal("admin", ["admin"])
+            principal = Principal(username="admin", roles=["admin"])
         elif auth_token == "user":
-            principal = Principal("user", ["user"])
+            principal = Principal(username="user", roles=["user"])
 
         # Verificar si la ruta requiere autenticación
         route_key = (path, method)
@@ -638,6 +637,7 @@ async def private_endpoint():
 @inject
 #service: Service = deps(Service)
 async def admin_endpoint(service:Service=deps(Service)):
+    service()
     return {"message": "Zona admin"}
 
 
