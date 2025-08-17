@@ -1,8 +1,16 @@
 Registrar principal en el ioc(x)
+
+Revisar get_features_modules para que no gestione los modulos
+y delegarlos al contexto de app.
+
 config de aplicación
+
 Ver si hay forma de particionar multiples OpenApi en el mismo microservicio
 Estudio de Roles
+
 	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
+
 caches de servidor
+
 logger
