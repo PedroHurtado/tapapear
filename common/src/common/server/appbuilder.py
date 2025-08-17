@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from common.ioc import container
 from common.server import get_feature_modules
+from common.context import get_app_context
 import uvicorn
 from typing import Optional
 
@@ -53,7 +54,7 @@ class AppBuilder:
         print(f"Features path: {self.features_path}")
         
         self._app = FastAPI(title=self.app_title)
-
+        
         # Cargar features dinámicamente usando la ruta especificada
         routers, module_names = get_feature_modules(features_path=self.features_path)
 
@@ -67,6 +68,7 @@ class AppBuilder:
         if module_names:
             print("Configurando inyección de dependencias...")
             try:
+                context = get_app_context()
                 container.wire(modules=module_names)
                 print("✓ Inyección de dependencias configurada")
             except Exception as e:

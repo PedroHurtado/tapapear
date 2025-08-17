@@ -18,10 +18,9 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):    
-    context = get_app_context()
-    module_names = [__name__]  
+    context = get_app_context()    
     container = AppContainer()
-    container.wire(module_names)    
+    container.wire(context.modules)    
 
     setup_security_dependencies(app)
     context.allow_anonymous_routes.update(context.docs_path)           
@@ -124,4 +123,5 @@ async def manual_security_endpoint():
 
 if __name__ == "__main__":    
     import uvicorn
-    uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)
+    #uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8081)

@@ -20,6 +20,7 @@ class Context(BaseModel):
     allow_anonymous_routes: set[tuple[str, str]] = Field(default_factory=set)
     authorize_routes: set[tuple[str, str]] = Field(default_factory=set)
     docs_path: FrozenSet[tuple[str, str]] = Field(default_factory=lambda: frozenset(DOCS_PATHS))
+    modules:set[str] = Field(default_factory=set)
     
 def _set_app_context(context: Context) -> Context:    
     _thread_local.context = context
