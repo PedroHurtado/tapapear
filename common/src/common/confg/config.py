@@ -1,7 +1,14 @@
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
+from pathlib import Path
 import yaml
+import sys
 
+
+
+class TagConfig(BaseModel):
+    prefix: str
+    description: Optional[str] = None
 
 class FirestoreConfig(BaseModel):
     database: str = "(default)"
@@ -12,7 +19,7 @@ class EnvConfig(BaseModel):
     debug: bool
     reload: bool
     log_level: str
-    firestore: FirestoreConfig
+    firestore: Optional[FirestoreConfig] = None
     allowed_hosts: Optional[List[str]] = None
 
 
@@ -22,7 +29,7 @@ class OpenApiConfig(BaseModel):
     openapi_version: str = "3.1.0"
     summary: Optional[str] = None
     description: Optional[str] = None
-    tags: Optional[List[Dict[str, Any]]] = None
+    tags: Dict[str, TagConfig]
     servers: Optional[List[Dict[str, Union[str, Any]]]] = None
     terms_of_service: Optional[str] = None
     contact: Optional[Dict[str, Union[str, Any]]] = None
@@ -34,13 +41,43 @@ class Config(BaseModel):
     name: str
     openapi: OpenApiConfig
     features: str
-    security: bool
+    port:int    
     middlewares: List[str]
     desarrollo: EnvConfig
     produccion: EnvConfig
 
 
-def load_config(path: str) -> Config:
-    with open(path, "r") as f:
-        data = yaml.safe_load(f)
-    return Config(**data)
+
+
+
+# Variable global
+
+config:Optional[Config] = None
+
+def load_config(path: Optional[str] = None) -> Config:
+    """
+    Carga el config.yaml automáticamente si no está cargado aún.
+    - Si `path` no se pasa, busca el config.yaml en la misma carpeta
+      que el script principal (sys.argv[0]).
+    """
+    global config
+    if config is None:
+        if path is None:
+            # Ruta del script principal (main.py del microservicio)
+            main_dir = Path(sys.argv[0]).resolve().parent
+            path = main_dir / "config.yaml"
+
+        with open(path, "r",encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        config = Config(**data)
+    return config
+
+    
+
+
+
+
+
+
+
+

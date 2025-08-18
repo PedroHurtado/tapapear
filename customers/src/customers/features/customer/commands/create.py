@@ -2,12 +2,13 @@ from fastapi import APIRouter
 from common.ioc import component, deps, inject
 from common.infraestructure.repository import InjectsRepo, Add
 from common.openapi import FeatureModel
+from common.server import build_router
 from customers.domain.customer import Customer, TaxType
 from customers.infraestructure.customer import Repository as repo, mapper
 from uuid import uuid4, UUID
 from datetime import datetime
 
-router = APIRouter(prefix="/customers", tags=["Customer"])
+router = build_router("customers")
 
 
 class Request(FeatureModel):

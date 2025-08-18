@@ -2,9 +2,10 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from common.middelwares import AuthMiddleware
 from common.context import context
+from common.confg import config,Config
 
 
-def create_custom_openapi(app: FastAPI):
+def create_custom_openapi(app: FastAPI, config:Config=config()):
     """
     Crea una función personalizada de OpenAPI para la aplicación FastAPI dada.
     
@@ -21,10 +22,12 @@ def create_custom_openapi(app: FastAPI):
             return app.openapi_schema
 
         openapi_schema = get_openapi(
-            title=app.title,
-            version=app.version,
-            description=app.description,
             routes=app.routes,
+            **app.config.openapi.model_dump(exclude={"tags"}),
+            tags=[
+                {"name": name, "description": tag.description}
+                for name, tag in app.config.openapi.tags.items()    
+            ]
         )
 
         has_auth_middleware = any(
@@ -189,7 +192,7 @@ def setup_custom_openapi(app: FastAPI) -> None:
 # app = FastAPI(title="Mi API", version="1.0.0")
 # 
 # # FastAPI invocará la función cuando sea necesario (ej: al acceder a /docs)
-# app.openapi = create_custom_openapi(app)
+# app.openapi = create_custom_openapi(app,config)
 # 
 # # O usando la función helper:
-# setup_custom_openapi(app)
+# setup_custom_openapi(app,config)
