@@ -69,7 +69,7 @@ class AppBuilder:
 
         # Usar los valores pasados como parámetros o los configurados en la clase
         final_host = host or self._host
-        final_port = port or self._app.config.port
+        final_port = self._app.config.port or port
 
         print(f"🚀 Iniciando servidor en http://{final_host}:{final_port}")
         uvicorn.run(self._app, host=final_host, port=final_port)

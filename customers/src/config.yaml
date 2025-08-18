@@ -1,5 +1,5 @@
 name: customers
-port: 8080
+port: 8081
 openapi:
   title: Mi API
   version: 1.0.0
