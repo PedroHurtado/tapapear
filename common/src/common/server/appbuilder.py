@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
-async def lifespan(app: CustomFastApi):
+async def _lifespan(app: CustomFastApi):
     app.container.wire(app.context.modules)
     setup_security_dependencies(app)
     app.context.allow_anonymous_routes.update(app.context.docs_path)
@@ -36,7 +36,7 @@ class AppBuilder:
 
         self._host = "0.0.0.0"        
         self._app = CustomFastApi(
-            config=config, context=context, container=container, lifespan=lifespan
+            config=config, context=context, container=container, lifespan=_lifespan
         )
 
     def build(self) -> "AppBuilder":
