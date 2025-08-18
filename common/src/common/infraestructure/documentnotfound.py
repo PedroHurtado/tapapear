@@ -3,5 +3,4 @@ class DocumentNotFound(Exception):
         if message is None:
             message = f"The document {id} does not exist in collection {collection}"
         super().__init__(message)
-        self.id = id
-        self.collection = collection
+        

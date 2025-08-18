@@ -7,7 +7,7 @@ from customers.infraestructure.customer import Repository as repo, mapper
 from uuid import uuid4, UUID
 from datetime import datetime
 
-router = APIRouter(prefix="/customers")
+router = APIRouter(prefix="/customers", tags=["Customer"])
 
 
 class Request(FeatureModel):
