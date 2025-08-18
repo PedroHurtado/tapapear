@@ -8,6 +8,12 @@ config de aplicación(X)
 	desarrollo y production
 	Estudiar esto
 
+    Mostrar todas las rutas posibles del servidor, es decir ip
+
+    para que aparezca localhost,etc
+
+    0.0.0.0 da error desde el explorador
+
 	# Opción 1: desde __main__
     import __main__
     if hasattr(__main__, '__file__') and __main__.__file__:
