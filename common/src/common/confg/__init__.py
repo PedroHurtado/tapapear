@@ -1,7 +1,6 @@
-from .config import load_config as config, OpenApiConfig, Config
+from .config import load_config as config, Config
 
 __all__ = [
-    "Config",
-    "OpenApiConfig",
+    "Config",    
     "config",
 ]

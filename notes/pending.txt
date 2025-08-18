@@ -1,9 +1,10 @@
 Registrar principal en el ioc(x)
 
 Revisar get_features_modules para que no gestione los modulos
-y delegarlos al contexto de app.
+y delegarlos al contexto de app(X)
 
-config de aplicación
+config de aplicación(X)
+	Cargar middelwares	
 
 Ver si hay forma de particionar multiples OpenApi en el mismo microservicio
 Estudio de Roles

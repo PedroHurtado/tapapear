@@ -5,10 +5,10 @@ import sys
 from typing import List, Tuple, Any
 
 
-def get_feature_modules(
+def get_feature_routers(
     features_path: str = "features",
     router_var_name: str = "router"
-) -> Tuple[List[Any], List[str]]:
+) -> List[Any]:
     """
     Escanea una ruta de features específica y devuelve los routers y nombres de módulos encontrados.
     
@@ -16,13 +16,10 @@ def get_feature_modules(
         features_path: Ruta en formato punto (ej: "customers.features")
         router_var_name: Nombre de la variable router a buscar en cada módulo.
 
-    Returns:
-        Una tupla (routers, module_names):
-            - routers: Lista de objetos APIRouter encontrados.
-            - module_names: Lista de nombres de módulos (str) para dependency_injector.
+    Returns:       
+            - routers: Lista de objetos APIRouter encontrados.        
     """
-    routers = []
-    module_names = []
+    routers = []    
 
     # Convertir la notación de puntos a ruta de sistema
     
@@ -71,7 +68,7 @@ def get_feature_modules(
                 sys.modules[full_module_name] = module
                 spec.loader.exec_module(module)
 
-                module_names.append(full_module_name)
+                
 
                 if hasattr(module, router_var_name):
                     routers.append(getattr(module, router_var_name))
@@ -83,7 +80,6 @@ def get_feature_modules(
             print(f"✗ Error al importar {file_path}: {e}")
             continue
 
-    print(f"Total de routers encontrados: {len(routers)}")
-    print(f"Total de módulos: {len(module_names)}")
+    print(f"Total de routers encontrados: {len(routers)}")    
 
-    return routers, module_names
+    return routers

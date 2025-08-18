@@ -65,6 +65,8 @@ class AppContainer(containers.DynamicContainer):
         if not self._built:
             self._build()
         super().wire(modules=modules)
+    def unwire(self):
+        super().unwire()
 
 
 container = AppContainer()

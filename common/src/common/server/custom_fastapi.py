@@ -1,15 +1,18 @@
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse 
+from fastapi.responses import JSONResponse
 from fastapi.utils import generate_unique_id
 from common.confg import Config
 from common.context import Context
+from common.ioc import AppContainer
+
 
 class CustomFastApi(FastAPI):
     def __init__(
         self,
         *,
-        config:Config, 
-        context:Context,
+        config: Config,
+        context: Context,
+        container: AppContainer,
         debug=False,
         routes=None,
         title="FastAPI",
@@ -87,11 +90,16 @@ class CustomFastApi(FastAPI):
         )
         self._config = config
         self._context = context
+        self._container = container
 
     @property
-    def config(self)->Config:
+    def config(self) -> Config:
         return self._config
-    
+
     @property
-    def context(self)->Context:
+    def context(self) -> Context:
         return self._context
+
+    @property
+    def container(self) -> AppContainer:
+        return self._container
