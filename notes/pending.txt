@@ -5,6 +5,7 @@ y delegarlos al contexto de app(X)
 
 config de aplicación(X)
 	Cargar middelwares	
+	desarrollo y production
 
 Ver si hay forma de particionar multiples OpenApi en el mismo microservicio
 Estudio de Roles
