@@ -1,6 +1,6 @@
 from typing import Type, Callable, Optional
 from enum import Enum
-from common.context import get_app_context
+from common.context import context
 
 
 class ProviderType(Enum):
@@ -19,7 +19,7 @@ def component(
     provider_type: ProviderType = ProviderType.SINGLETON,
     factory: Optional[Callable] = None,
 ):
-    component_registry =get_app_context().component_registry
+    component_registry =context.component_registry
     def wrap(cls):
         key = get_component_key(cls)
         if key in component_registry:

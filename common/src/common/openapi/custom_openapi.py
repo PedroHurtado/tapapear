@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from common.middelwares import AuthMiddleware
-from common.context import get_app_context
+from common.context import context
 
 
 def create_custom_openapi(app: FastAPI):
@@ -14,8 +14,7 @@ def create_custom_openapi(app: FastAPI):
     Returns:
         Función personalizada de OpenAPI que FastAPI invocará cuando sea necesario
     """
-    def custom_openapi():
-        context = get_app_context()
+    def custom_openapi():        
 
         # FastAPI cachea el esquema, si ya existe lo devuelve
         if app.openapi_schema:

@@ -7,8 +7,8 @@ from common.security import(
     security_scheme,
     Principal
 )
-from common.context import get_app_context
-from common.ioc import AppContainer, inject,deps,component
+from common.context import context
+from common.ioc import container, inject,deps,component
 from common.openapi import(
     setup_custom_openapi,
     build_error_responses,
@@ -17,11 +17,8 @@ from common.openapi import(
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):    
-    context = get_app_context()    
-    container = AppContainer()
-    container.wire(context.modules)    
-
+async def lifespan(app: FastAPI):            
+    container.wire(context.modules)  
     setup_security_dependencies(app)
     context.allow_anonymous_routes.update(context.docs_path)           
     yield

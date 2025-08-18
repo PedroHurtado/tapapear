@@ -1,8 +1,5 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, FrozenSet
-import threading
-
-_thread_local = threading.local()
 
 DOCS_PATHS: set[tuple[str, str]] = {
     ("/openapi.json", "GET"),
@@ -22,11 +19,4 @@ class Context(BaseModel):
     docs_path: FrozenSet[tuple[str, str]] = Field(default_factory=lambda: frozenset(DOCS_PATHS))
     modules:set[str] = Field(default_factory=set)
     
-def _set_app_context(context: Context) -> Context:    
-    _thread_local.context = context
-    return context
-
-def get_app_context() -> Context:
-    if not hasattr(_thread_local, 'context'):
-        _set_app_context(Context())
-    return _thread_local.context
+context = Context()

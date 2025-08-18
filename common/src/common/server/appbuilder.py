@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from common.ioc import container
 from common.server import get_feature_modules
-from common.context import get_app_context
+from common.context import context
 import uvicorn
 from typing import Optional
 
@@ -67,8 +67,7 @@ class AppBuilder:
         # Wire del container solo si hay módulos
         if module_names:
             print("Configurando inyección de dependencias...")
-            try:
-                context = get_app_context()
+            try:                
                 container.wire(modules=module_names)
                 print("✓ Inyección de dependencias configurada")
             except Exception as e:

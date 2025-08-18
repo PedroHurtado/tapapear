@@ -2,7 +2,7 @@ import inspect
 from typing import Iterable
 from dependency_injector import containers, providers
 from common.ioc.component import ProviderType, get_component_key
-from common.context import get_app_context
+from common.context import context
 
 class AppContainer(containers.DynamicContainer):
     def __init__(self):
@@ -10,7 +10,7 @@ class AppContainer(containers.DynamicContainer):
         self._built = False
 
     def _build(self):
-        component_registry = get_app_context().component_registry
+        component_registry = context.component_registry
         # Primero, crear todos los providers sin dependencias
         for key in component_registry:
             self.__dict__[key] = None

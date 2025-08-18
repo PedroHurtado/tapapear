@@ -1,5 +1,3 @@
-from .context import get_app_context
+from .context import context
 
-__all__=[
-    "get_app_context",    
-]
+__all__ = ["context"]

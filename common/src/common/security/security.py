@@ -7,7 +7,7 @@ from contextvars import ContextVar
 
 from pydantic import BaseModel
 from common.ioc import component, ProviderType
-from common.context import get_app_context
+from common.context import context
 import inspect
 
 security_scheme = HTTPBearer(auto_error=False)
@@ -61,8 +61,7 @@ def authorize(roles: Optional[list[str]] = None):
 
     return decorator
 
-def setup_security_dependencies(app: FastAPI):
-    context = get_app_context()    
+def setup_security_dependencies(app: FastAPI):       
     for route in app.routes:
         if isinstance(route, APIRoute):
             endpoint = getattr(route, "endpoint", None)

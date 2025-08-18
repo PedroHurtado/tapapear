@@ -1,7 +1,7 @@
 from starlette.types import ASGIApp,Scope,Receive,Send
 from fastapi import Request, HTTPException
 from common.security import Principal,principal_ctx
-from common.context import get_app_context
+from common.context import context
 
 class AuthMiddleware:
     """Middleware para inyectar el Principal en el contexto."""
@@ -9,8 +9,7 @@ class AuthMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        context = get_app_context()
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):        
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
