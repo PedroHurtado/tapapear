@@ -106,6 +106,16 @@ def get_current_transaction() -> Optional[AsyncTransaction]:
     """Obtiene la transacción actual del contexto"""
     return _current_transaction.get()
 
+"""def initialize_database(config: FirestoreConfig):
+    credentials_path = os.getenv(config.credentials_env)
+    if not credentials_path:
+        raise RuntimeError(f"La variable {config.credentials_env} no está definida")
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+    cred = Credentials.from_service_account_file(credentials_path)
+    db = AsyncClient(project=cred.project_id, credentials=cred, database=config.database)
+    init_firestore_transactions(db)
+    return db"""
 
 def initialize_database(
     credentials_path: str,

@@ -1,0 +1,51 @@
+name: "mi-app"
+
+openapi:
+  title: "Mi API"
+  version: "1.0.0"
+  openapi_version: "3.1.0"
+  summary: "API de ejemplo"
+  description: "Documentación de la API con configuración avanzada"
+  tags:
+    - name: "users"
+      description: "Operaciones relacionadas con usuarios"
+    - name: "payments"
+      description: "Gestión de pagos"
+  servers:
+    - url: "https://api.miapp.com"
+      description: "Servidor principal de producción"
+    - url: "https://staging.miapp.com"
+      description: "Servidor de pruebas"
+  terms_of_service: "https://miapp.com/terms"
+  contact:
+    name: "Soporte Técnico"
+    url: "https://miapp.com/support"
+    email: "support@miapp.com"
+  license_info:
+    name: "MIT"
+    url: "https://opensource.org/licenses/MIT"
+  separate_input_output_schemas: true
+
+features: "customers.features"
+
+
+
+middlewares:
+  - "auth"
+  - "cors"  
+
+desarrollo:
+  debug: true
+  reload: true
+  log_level: "debug"
+  firestore:
+    database: "(default)"
+    credentials_env: "GOOGLE_APPLICATION_CREDENTIALS"
+
+produccion:
+  debug: false
+  reload: false
+  log_level: "info"
+  firestore:
+    database: "(default)"
+    credentials_env: "GOOGLE_APPLICATION_CREDENTIALS"
