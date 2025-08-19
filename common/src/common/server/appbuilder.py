@@ -1,3 +1,4 @@
+from fastapi import Request
 from common.ioc import container, AppContainer
 from common.server import get_feature_routers
 from common.context import context
@@ -7,17 +8,35 @@ from common.openapi import setup_custom_openapi
 from common.security import setup_security_dependencies
 from common.middelwares import SUPPORT_MIDDELWARES
 from .custom_fastapi import CustomFastApi
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
+
 import uvicorn
 
 
 from contextlib import asynccontextmanager
 
-def setup_middelwares(app:CustomFastApi):
+def _setup_middelwares(app:CustomFastApi):
     middelwares = app.config.middlewares
     for mw in middelwares:
         middleware_cls = SUPPORT_MIDDELWARES[mw.class_]
         app.add_middleware(middleware_cls, **mw.options)
 
+
+
+
+def health(request:Request) -> PlainTextResponse:
+    return PlainTextResponse("OK")
+
+def _setup_health(app:CustomFastApi):
+    app.router.routes.append(
+        Route(
+            path="/health",
+            endpoint=health,
+            methods=["GET", "HEAD"],
+            name="health",
+        )
+    )
 
 @asynccontextmanager
 async def _lifespan(app: CustomFastApi):
@@ -47,6 +66,8 @@ class AppBuilder:
         self._app = CustomFastApi(
             config=config, context=context, container=container, lifespan=_lifespan
         )
+        
+        _setup_health(self._app)
 
     def build(self) -> "AppBuilder":
         """Construye la aplicación FastAPI."""
@@ -76,7 +97,7 @@ class AppBuilder:
 
         setup_custom_openapi(self._app)
         
-        setup_middelwares(self._app)
+        _setup_middelwares(self._app)
                         
         self._app.exception_handlers.clear()
 

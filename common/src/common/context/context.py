@@ -10,6 +10,8 @@ DOCS_PATHS: set[tuple[str, str]] = {
     ("/docs/oauth2-redirect", "HEAD"),
     ("/redoc", "GET"),
     ("/redoc", "HEAD"),
+    ("/health", "GET"),
+    ("/health", "HEAD"),
 }
 
 class Context(BaseModel):   
