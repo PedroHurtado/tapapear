@@ -17,6 +17,8 @@ openapi:
       prefix: /customers
       description: Gestión de clientes
   servers:
+    - url: http://localhost:8081
+      description: Servidor de desarrollo
     - url: https://api.miapp.com
       description: Servidor principal de producción
     - url: https://staging.miapp.com

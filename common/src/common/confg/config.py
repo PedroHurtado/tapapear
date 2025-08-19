@@ -46,7 +46,7 @@ class Config(BaseModel):
     name: str
     openapi: OpenApiConfig
     features: str
-    port:int    
+    port:int=8080    
     middlewares: List[Middlewares] = []
     desarrollo: EnvConfig
     produccion: EnvConfig

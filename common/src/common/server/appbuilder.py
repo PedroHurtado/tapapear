@@ -21,9 +21,11 @@ def setup_middelwares(app:CustomFastApi):
 
 @asynccontextmanager
 async def _lifespan(app: CustomFastApi):
-    app.container.wire(app.context.modules)
-    setup_security_dependencies(app)
-    app.context.allow_anonymous_routes.update(app.context.docs_path)
+    try:        
+        setup_security_dependencies(app)
+        app.context.allow_anonymous_routes.update(app.context.docs_path)        
+    except Exception as e:
+        raise e
     yield
     app.container.unwire()
 
@@ -41,7 +43,7 @@ class AppBuilder:
         container: AppContainer = container,
     ):
 
-        self._host = "0.0.0.0"        
+        self._host = "127.0.0.1"        
         self._app = CustomFastApi(
             config=config, context=context, container=container, lifespan=_lifespan
         )
@@ -55,14 +57,22 @@ class AppBuilder:
             print("⚠ Advertencia: No se encontraron routers en las features")
 
         # Registrar routers
-        print("Registrando routers...")
+        
         for router in routers:
             try:
                 self._app.include_router(router)
             except Exception as e:
                 raise e
 
-        print(f"  - {len(routers)} routers registrados")
+        # Registras modules en IOC
+        modules = self._app.context.modules        
+        try:            
+            self._app.container.wire(modules)            
+        except Exception as e:
+            raise e
+
+        print(f"  -  Routers registrados {len(routers)}")
+        print(f"  -  DI registrados {len(modules)}")
 
         setup_custom_openapi(self._app)
         
@@ -70,7 +80,7 @@ class AppBuilder:
                         
         self._app.exception_handlers.clear()
 
-    def run(self, host: str = "0.0.0.0", port: int = 8080) -> None:
+    def run(self, host: str = "127.0.0.1", port: int = 8080) -> None:
 
         self.build()
 
@@ -78,5 +88,5 @@ class AppBuilder:
         final_host = host or self._host
         final_port = self._app.config.port or port
 
-        print(f"🚀 Iniciando servidor en http://{final_host}:{final_port}")
+        print(f"🚀 Servidor en http://{final_host}:{final_port}")
         uvicorn.run(self._app, host=final_host, port=final_port)
