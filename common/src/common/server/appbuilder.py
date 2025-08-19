@@ -5,11 +5,18 @@ from common.confg import Config, config
 from common.context import context, Context
 from common.openapi import setup_custom_openapi
 from common.security import setup_security_dependencies
+from common.middelwares import SUPPORT_MIDDELWARES
 from .custom_fastapi import CustomFastApi
 import uvicorn
 
 
 from contextlib import asynccontextmanager
+
+def setup_middelwares(app:CustomFastApi):
+    middelwares = app.config.middlewares
+    for mw in middelwares:
+        middleware_cls = SUPPORT_MIDDELWARES[mw.class_]
+        app.add_middleware(middleware_cls, **mw.options)
 
 
 @asynccontextmanager
@@ -59,8 +66,8 @@ class AppBuilder:
 
         setup_custom_openapi(self._app)
         
-        #TODO:middelwares
-
+        setup_middelwares(self._app)
+                        
         self._app.exception_handlers.clear()
 
     def run(self, host: str = "0.0.0.0", port: int = 8080) -> None:

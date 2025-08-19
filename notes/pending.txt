@@ -4,25 +4,25 @@ Revisar get_features_modules para que no gestione los modulos
 y delegarlos al contexto de app(X)
 
 config de aplicación(X)
-	Cargar middelwares	
+	Cargar middelwares(x)	
 	desarrollo y production
+
 	Estudiar esto
+        Mostrar todas las rutas posibles del servidor, es decir ip
 
-    Mostrar todas las rutas posibles del servidor, es decir ip
+        para que aparezca localhost,etc
 
-    para que aparezca localhost,etc
+        0.0.0.0 da error desde el explorador
 
-    0.0.0.0 da error desde el explorador
-
-	# Opción 1: desde __main__
-    import __main__
-    if hasattr(__main__, '__file__') and __main__.__file__:
-        main_dir = os.path.dirname(os.path.abspath(__main__.__file__))
-        features_path_fs = features_path.replace(".", os.sep)
-        potential_path = os.path.join(main_dir, features_path_fs)
-        if os.path.exists(potential_path):
-            base_path = potential_path    
-	intertar cambiar sys.args[0] para extraer el path del main
+	    # Opción 1: desde __main__
+        import __main__
+        if hasattr(__main__, '__file__') and __main__.__file__:
+            main_dir = os.path.dirname(os.path.abspath(__main__.__file__))
+            features_path_fs = features_path.replace(".", os.sep)
+            potential_path = os.path.join(main_dir, features_path_fs)
+            if os.path.exists(potential_path):
+                base_path = potential_path    
+	    intertar cambiar sys.args[0] para extraer el path del main
 
 
 Ver si hay forma de particionar multiples OpenApi en el mismo microservicio,

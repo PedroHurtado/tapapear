@@ -1,7 +1,10 @@
 from .errormiddelware import ErrorMiddleware
 from .authmiddelware import AuthMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
-__all__ = [
-    "ErrorMiddleware",
-    "AuthMiddleware"
-]
+SUPPORT_MIDDELWARES = {
+    "ErrorMiddleware": ErrorMiddleware,
+    "AuthMiddleware": AuthMiddleware,
+    "CORSMiddleware": CORSMiddleware,
+}
+__all__ = ["suport_middlewares" "ErrorMiddleware", "SUPPORT_MIDDELWARES"]

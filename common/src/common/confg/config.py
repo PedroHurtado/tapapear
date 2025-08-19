@@ -1,10 +1,15 @@
 from typing import List, Optional, Dict, Any, Union
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from pathlib import Path
 import yaml
 import sys
 
+class Middlewares(BaseModel):
+    class_: str = Field(..., alias="class")  
+    options: Dict[str, Any] = {}
 
+    class Config:
+        validate_by_name = True
 
 class TagConfig(BaseModel):
     prefix: str
@@ -42,7 +47,7 @@ class Config(BaseModel):
     openapi: OpenApiConfig
     features: str
     port:int    
-    middlewares: List[str]
+    middlewares: List[Middlewares] = []
     desarrollo: EnvConfig
     produccion: EnvConfig
 

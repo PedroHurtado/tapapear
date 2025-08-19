@@ -34,9 +34,18 @@ features: customers.features
 
 
 
-middlewares:
-  - auth
-  - cors  
+middlewares:  
+  - class: CORSMiddleware
+    options:
+      allow_origins: ["*"]
+      #allow_methods: ["*"]
+      allow_headers: ["Authorization"]
+      #allow_credentials: true
+      #expose_headers: ["X-Total-Count"]
+      max_age: 3600  
+  - class: AuthMiddleware
+  - class: ErrorMiddleware
+
 
 desarrollo:
   debug: true
