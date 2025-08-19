@@ -1,11 +1,14 @@
 name: customers
+
 port: 8081
+
 openapi:
   title: Mi API
   version: 1.0.0
   openapi_version: 3.1.0
   summary: API de ejemplo
   description: Documentación de la API con configuración avanzada
+
   tags:  
     users:
       prefix: /users
@@ -32,9 +35,9 @@ openapi:
     name: MIT
     url: https://opensource.org/licenses/MIT
   separate_input_output_schemas: true
+
+
 features: customers.features
-
-
 
 middlewares:  
   - class: CORSMiddleware
