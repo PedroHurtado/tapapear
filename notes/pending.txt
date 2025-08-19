@@ -6,6 +6,7 @@ y delegarlos al contexto de app(X)
 config de aplicación(X)
 	Cargar middelwares(x)	
 	desarrollo y production
+    healt endpoint
 
 	Estudiar esto
         Mostrar todas las rutas posibles del servidor, es decir ip
