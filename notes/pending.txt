@@ -8,7 +8,7 @@ config de aplicación(X)
 	desarrollo y production
     healt endpoint(x)       
     refactorizar custom_openapy con claude
-	ver si puedo inyectar en IOC el config directamente 
+	ver si puedo inyectar en IOC el config directamente (X)
 	con el decorador
         
 
