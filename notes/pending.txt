@@ -6,7 +6,7 @@ y delegarlos al contexto de app(X)
 config de aplicación(X)
 	Cargar middelwares(x)	
 	desarrollo y production
-    healt endpoint        
+    healt endpoint(x)       
     refactorizar custom_openapy con claude
 	ver si puedo inyectar en IOC el config directamente 
 	con el decorador

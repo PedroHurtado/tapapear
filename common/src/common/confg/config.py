@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel,Field
 from pathlib import Path
+from common.ioc import component, ProviderType
 import yaml
 import sys
 
@@ -42,24 +43,9 @@ class OpenApiConfig(BaseModel):
     separate_input_output_schemas: bool = True
 
 
-class Config(BaseModel):
-    name: str
-    openapi: OpenApiConfig
-    features: str
-    port:int=8080    
-    middlewares: List[Middlewares] = []
-    desarrollo: EnvConfig
-    produccion: EnvConfig
+config:Optional["Config"] = None
 
-
-
-
-
-# Variable global
-
-config:Optional[Config] = None
-
-def load_config(path: Optional[str] = None) -> Config:
+def load_config(path: Optional[str] = None) -> "Config":
     """
     Carga el config.yaml automáticamente si no está cargado aún.
     - Si `path` no se pasa, busca el config.yaml en la misma carpeta
@@ -76,6 +62,20 @@ def load_config(path: Optional[str] = None) -> Config:
             data = yaml.safe_load(f)
         config = Config(**data)
     return config
+
+def _load_config():
+    return load_config()
+@component(provider_type=ProviderType.FACTORY, factory=_load_config)
+class Config(BaseModel):
+    name: str
+    openapi: OpenApiConfig
+    features: str
+    port:int=8080    
+    middlewares: List[Middlewares] = []
+    desarrollo: EnvConfig
+    produccion: EnvConfig
+# Variable global
+
 
     
 
