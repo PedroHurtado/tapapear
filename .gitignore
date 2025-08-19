@@ -1,3 +1,4 @@
+*.env
 /tapapear.json
 strype
 # Byte-compiled / optimized / DLL files

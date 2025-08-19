@@ -1,20 +1,33 @@
 from typing import List, Optional, Dict, Any, Union
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 from pathlib import Path
 from common.ioc import component, ProviderType
+from dotenv import load_dotenv
+import os
 import yaml
 import sys
 
+
+main_dir = Path(sys.argv[0]).resolve().parent
+
+config: Optional["Config"] = None
+
+load_dotenv(main_dir / ".env")
+APP_ENV = os.getenv("APP_ENV", "production")
+
+
 class Middlewares(BaseModel):
-    class_: str = Field(..., alias="class")  
+    class_: str = Field(..., alias="class")
     options: Dict[str, Any] = {}
 
     class Config:
         validate_by_name = True
 
+
 class TagConfig(BaseModel):
     prefix: str
     description: Optional[str] = None
+
 
 class FirestoreConfig(BaseModel):
     database: str = "(default)"
@@ -43,46 +56,46 @@ class OpenApiConfig(BaseModel):
     separate_input_output_schemas: bool = True
 
 
-config:Optional["Config"] = None
 
-def load_config(path: Optional[str] = None) -> "Config":
-    """
-    Carga el config.yaml automáticamente si no está cargado aún.
-    - Si `path` no se pasa, busca el config.yaml en la misma carpeta
-      que el script principal (sys.argv[0]).
-    """
+
+
+def load_config(path: Optional[str] = None) -> "Config":   
     global config
     if config is None:
         if path is None:
-            # Ruta del script principal (main.py del microservicio)
-            main_dir = Path(sys.argv[0]).resolve().parent
             path = main_dir / "config.yaml"
-
-        with open(path, "r",encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        config = Config(**data)
+
+        # Determinar entorno activo según APP_ENV
+        active_env_name = APP_ENV  # ya cargado con load_dotenv
+        env_data = data.get(active_env_name, {})
+
+        # Crear la Config con solo la env activa
+        env_config = EnvConfig(**env_data)
+
+        # Filtrar development/production del diccionario original
+        filtered_data = {k: v for k, v in data.items() if k not in ("development", "production")}
+        filtered_data["env"] = env_config
+
+        config = Config(**filtered_data)
+
     return config
+
+
 
 def _load_config():
     return load_config()
+
+
 @component(provider_type=ProviderType.FACTORY, factory=_load_config)
 class Config(BaseModel):
     name: str
     openapi: OpenApiConfig
     features: str
-    port:int=8080    
+    port: int = 8080
     middlewares: List[Middlewares] = []
-    desarrollo: EnvConfig
-    produccion: EnvConfig
-# Variable global
-
-
-    
-
-
-
-
-
+    env: EnvConfig  # solo la env activa
 
 
 

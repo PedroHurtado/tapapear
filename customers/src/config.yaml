@@ -49,7 +49,7 @@ middlewares:
   - class: ErrorMiddleware
 
 
-desarrollo:
+development:
   debug: true
   reload: true
   log_level: debug
@@ -57,7 +57,7 @@ desarrollo:
     database: (default)
     credentials_env: GOOGLE_APPLICATION_CREDENTIALS
 
-produccion:
+production:
   debug: false
   reload: false
   log_level: info

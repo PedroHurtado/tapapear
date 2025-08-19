@@ -16,7 +16,8 @@ dependencies = [
     "uvicorn (>=0.35.0,<0.36.0)",    
     "fastapi[standard] (>=0.116.1,<0.117.0)",    
     "inflect (>=7.5.0,<8.0.0)",    
-    "pyyaml (>=6.0.2,<7.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",    
+    "python-dotenv (>=1.1.1,<2.0.0)",
 ]
 
 [tool.poetry]
