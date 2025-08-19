@@ -8,6 +8,8 @@ config de aplicación(X)
 	desarrollo y production
     healt endpoint        
     refactorizar custom_openapy con claude
+	ver si puedo inyectar en IOC el config directamente 
+	con el decorador
         
 
         
@@ -23,3 +25,5 @@ Estudio de Roles
 caches de servidor
 
 logger
+
+HttpClient
