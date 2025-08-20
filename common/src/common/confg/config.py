@@ -35,7 +35,7 @@ class FirestoreConfig(BaseModel):
 
 
 class EnvConfig(BaseModel):
-    debug: bool
+    openapi:bool    
     reload: bool
     log_level: str
     firestore: Optional[FirestoreConfig] = None
@@ -56,10 +56,7 @@ class OpenApiConfig(BaseModel):
     separate_input_output_schemas: bool = True
 
 
-
-
-
-def load_config(path: Optional[str] = None) -> "Config":   
+def load_config(path: Optional[str] = None) -> "Config":
     global config
     if config is None:
         if path is None:
@@ -75,13 +72,14 @@ def load_config(path: Optional[str] = None) -> "Config":
         env_config = EnvConfig(**env_data)
 
         # Filtrar development/production del diccionario original
-        filtered_data = {k: v for k, v in data.items() if k not in ("development", "production")}
+        filtered_data = {
+            k: v for k, v in data.items() if k not in ("development", "production")
+        }
         filtered_data["env"] = env_config
 
         config = Config(**filtered_data)
 
     return config
-
 
 
 def _load_config():
@@ -96,6 +94,3 @@ class Config(BaseModel):
     port: int = 8080
     middlewares: List[Middlewares] = []
     env: EnvConfig  # solo la env activa
-
-
-

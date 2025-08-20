@@ -52,16 +52,16 @@ middlewares:
   - class: ErrorMiddleware
 
 
-development:
-  debug: true
+development:  
+  openapi: true  
   reload: true
   log_level: debug
   firestore:
     database: (default)
     credentials_env: GOOGLE_APPLICATION_CREDENTIALS
 
-production:
-  debug: false
+production: 
+  openapi: false  
   reload: false
   log_level: info
   firestore:
