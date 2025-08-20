@@ -2,6 +2,8 @@ resolver uvicorn
 Firestore credentials
 refactorizar custom_openapy con claude  
 Ver errors middelware->Pasar a exception handler de fastapi
+Ver como devolver None en los controllers y que genere una respuesta
+vacia
 Estudio de Roles
 	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
