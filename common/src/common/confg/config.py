@@ -2,17 +2,19 @@ from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field
 from pathlib import Path
 from common.ioc import component, ProviderType
+from common.util import get_path
 from dotenv import load_dotenv
 import os
 import yaml
-import sys
 
 
-main_dir = Path(sys.argv[0]).resolve().parent
+
+
 
 config: Optional["Config"] = None
 
-load_dotenv(main_dir / ".env")
+
+load_dotenv(get_path(".env"))
 APP_ENV = os.getenv("APP_ENV", "production")
 
 
@@ -31,6 +33,7 @@ class TagConfig(BaseModel):
 
 class FirestoreConfig(BaseModel):
     database: str = "(default)"
+    credential_path:Optional[str] = None
     credentials_env: str = "GOOGLE_APPLICATION_CREDENTIALS"
 
 
@@ -60,7 +63,7 @@ def load_config(path: Optional[str] = None) -> "Config":
     global config
     if config is None:
         if path is None:
-            path = main_dir / "config.yaml"
+            path = get_path("config.yaml")
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 

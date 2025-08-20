@@ -1,9 +1,11 @@
 import glob
 import os
-import importlib.util
 import sys
+import importlib.util
+
 from typing import List, Tuple, Any
 from pathlib import Path
+from common.util import get_path
 
 
 def get_feature_routers(
@@ -24,11 +26,11 @@ def get_feature_routers(
 
     base_path = None
 
-    main_dir = Path(sys.argv[0]).resolve().parent
+    
 
     features_path_fs = Path(*features_path.split("."))
 
-    potential_path = main_dir / features_path_fs
+    potential_path = get_path(features_path_fs)
 
     if potential_path.exists():
         base_path = potential_path

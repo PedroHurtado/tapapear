@@ -120,5 +120,5 @@ async def manual_security_endpoint():
 
 if __name__ == "__main__":    
     import uvicorn
-    #uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run("authorization:app", host="0.0.0.0", port=8081, reload=True)
+    #uvicorn.run(app, host="0.0.0.0", port=8081)

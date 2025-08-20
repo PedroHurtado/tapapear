@@ -11,6 +11,7 @@ from google.cloud.firestore import AsyncClient, AsyncTransaction, AsyncDocumentR
 from google.oauth2.service_account import Credentials
 from .documentnotfound import DocumentNotFound
 from common.inflect import plural
+from common.util import get_path
 from typing import (
     Any,
     Callable,
@@ -121,8 +122,8 @@ def initialize_database(
     credentials_path: str,
     database: str = "(default)",
 ):
-    global db
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+    global db     
+    credentials_path = get_path(credentials_path)
     cred = Credentials.from_service_account_file(credentials_path)
     db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
     init_firestore_transactions(db)

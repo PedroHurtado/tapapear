@@ -58,6 +58,7 @@ development:
   log_level: debug
   firestore:
     database: (default)
+    credential_path: credentials.json
     credentials_env: GOOGLE_APPLICATION_CREDENTIALS
 
 production: 
@@ -66,4 +67,5 @@ production:
   log_level: info
   firestore:
     database: (default)
+    credential_path: credentials.json
     credentials_env: GOOGLE_APPLICATION_CREDENTIALS

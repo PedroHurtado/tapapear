@@ -10,9 +10,8 @@ from common.middelwares import SUPPORT_MIDDELWARES
 from .custom_fastapi import CustomFastApi
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
-
+from typing import Optional
 import uvicorn
-
 
 from contextlib import asynccontextmanager
 
@@ -29,7 +28,10 @@ async def _lifespan(app: CustomFastApi):
     except Exception as e:
         raise e
     yield
-    app.container.unwire()
+    try:
+        app.container.unwire()
+    except:
+        raise e
 
 
 class AppBuilder:
@@ -68,6 +70,11 @@ class AppBuilder:
             app.add_middleware(middleware_cls, **mw.options)
 
     def build(self) -> "AppBuilder":
+
+        if self._config.env.firestore:
+            from common.infraestructure import initialize_database
+            initialize_database(self._config.env.firestore.credential_path)    
+
         """Construye la aplicación FastAPI."""
 
         self._app = CustomFastApi(
@@ -113,9 +120,12 @@ class AppBuilder:
 
         return self
 
-    def run(self, port: int = 8080) -> None:
+    def _validate_app(self):
         if self._app is None:
-            self.build()
+            raise RuntimeError("app not started")       
+        
+    def run(self, port: int = 8080) -> None:
+        self._validate_app()
 
         final_host = "127.0.0.1"
         final_port = self._app.config.port or port
@@ -127,15 +137,16 @@ class AppBuilder:
         reload = self._config.env.reload
         workers = 1 if reload else 4
 
-        #uvicorn_config.update({"reload": reload})
+        #uvicorn_config.update({"reload": reload,"workers":workers})
 
         print(f"🚀 Servidor en http://{final_host}:{final_port}")
+        if self._config.env.openapi:
+            print(f"🚀 OpenApi en http://{final_host}:{final_port}/docs")
 
         #uvicorn.run("main:app", **uvicorn_config)
         uvicorn.run(self._app, **uvicorn_config)
 
     @property
     def app(self) -> CustomFastApi:
-        if self._app == None:
-            self.build()
+        self._validate_app()
         return self._app
