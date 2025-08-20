@@ -43,7 +43,7 @@ middlewares:
   - class: CORSMiddleware
     options:
       allow_origins: ["*"]
-      #allow_methods: ["*"]
+      allow_methods: ["*"]
       allow_headers: ["Authorization"]
       #allow_credentials: true
       #expose_headers: ["X-Total-Count"]
