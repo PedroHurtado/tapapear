@@ -1,11 +1,10 @@
 resolver uvicorn
 Firestore credentials
 refactorizar custom_openapy con claude  
+Ver errors middelware
 Estudio de Roles
-
 	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
-
 caches de servidor
 logger
 HttpClient

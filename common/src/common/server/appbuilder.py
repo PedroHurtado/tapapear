@@ -8,9 +8,8 @@ from common.openapi import setup_custom_openapi
 from common.security import setup_security_dependencies
 from common.middelwares import SUPPORT_MIDDELWARES
 from .custom_fastapi import CustomFastApi
-from starlette.responses import PlainTextResponse
-from starlette.routing import Route
-from typing import Optional
+from fastapi.responses import PlainTextResponse
+from fastapi.requests import Request
 import uvicorn
 
 from contextlib import asynccontextmanager
@@ -53,13 +52,15 @@ class AppBuilder:
         self._app = None
 
     def _setup_health(self, app: CustomFastApi):
-        app.router.routes.append(
-            Route(
-                path="/health",
-                endpoint=health,
-                methods=["GET", "HEAD"],
-                name="health",
-            )
+        async def health():
+            return PlainTextResponse("OK")
+    
+        app.add_api_route(
+            path="/health",
+            endpoint=health,
+            methods=["GET", "HEAD"],
+            include_in_schema=False,
+            name="health"
         )
 
     def _setup_middelwares(self, app: CustomFastApi):
