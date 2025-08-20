@@ -7,7 +7,7 @@ config de aplicación(X)
 	Cargar middelwares(x)	
 	desarrollo y production(x)
 		ahora resolver la carga de uvicorn
-		y la de firestore	
+		y la de firestore(x)	
     healt endpoint(x)       
     refactorizar custom_openapy con claude
 	ver si puedo inyectar en IOC el config directamente (X)
