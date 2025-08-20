@@ -1,31 +1,11 @@
-Registrar principal en el ioc(x)
-
-Revisar get_features_modules para que no gestione los modulos
-y delegarlos al contexto de app(X)
-
-config de aplicación(X)
-	Cargar middelwares(x)	
-	desarrollo y production(x)
-		ahora resolver la carga de uvicorn
-		y la de firestore(x)	
-    healt endpoint(x)       
-    refactorizar custom_openapy con claude
-	ver si puedo inyectar en IOC el config directamente (X)
-	con el decorador
-        
-
-        
-
-Ver si hay forma de particionar multiples OpenApi en el mismo microservicio,
-o mejor tener los schemas separados por tags1(X)
-
+resolver uvicorn
+Firestore credentials
+refactorizar custom_openapy con claude  
 Estudio de Roles
 
 	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
 
 caches de servidor
-
 logger
-
 HttpClient
