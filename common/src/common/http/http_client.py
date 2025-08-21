@@ -1,4 +1,3 @@
-
 import functools
 import inspect
 import httpx
@@ -9,6 +8,7 @@ from pydantic import BaseModel, create_model, ValidationError
 
 
 jwt_token_var: ContextVar[Optional[str]] = ContextVar("jwt_token", default=None)
+
 
 class ContextAuth(httpx.Auth):
     """
@@ -22,24 +22,32 @@ class ContextAuth(httpx.Auth):
         yield request
 
 
-
-
-
-
 class HttpClient:
-    def __init__(self, base_url: str, auth: Optional[httpx.Auth] = ContextAuth(), headers: Optional[dict] = None):
+    def __init__(
+        self,
+        base_url: str,
+        auth: Optional[httpx.Auth] = ContextAuth(),
+        headers: Optional[dict] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
         self.headers = headers or {}
 
-    async def _build_request(self, method: str, path: str, func: Callable, args, kwargs):
+    async def _build_request(
+        self, method: str, path: str, func: Callable, args, kwargs
+    ):
         sig = inspect.signature(func)
         bound = sig.bind_partial(*args, **kwargs)
         bound.apply_defaults()
 
         # --- validar args con Pydantic ---
-        fields = {name: (param.annotation, param.default if param.default is not inspect._empty else ...)
-                  for name, param in sig.parameters.items()}
+        fields = {
+            name: (
+                param.annotation,
+                param.default if param.default is not inspect._empty else ...,
+            )
+            for name, param in sig.parameters.items()
+        }
         Model = create_model(f"{func.__name__}Params", **fields)  # modelo dinámico
         try:
             validated = Model(**bound.arguments)
@@ -60,7 +68,7 @@ class HttpClient:
             b = getattr(validated, "body")
             if b is not None:
                 body = b.model_dump() if isinstance(b, BaseModel) else b
-        
+
         async with httpx.AsyncClient(auth=self.auth, headers=self.headers) as client:
             response = await client.request(method, url, params=query, json=body)
             response.raise_for_status()
@@ -108,13 +116,23 @@ class HttpClient:
             @functools.wraps(func)
             async def inner(*args, **kwargs) -> Any:
                 return await self._build_request(method, path, func, args, kwargs)
+
             return inner
+
         return wrapper
 
     # Decoradores HTTP
-    def get(self, path: str): return self._decorator("GET", path)
-    def post(self, path: str): return self._decorator("POST", path)
-    def put(self, path: str): return self._decorator("PUT", path)
-    def delete(self, path: str): return self._decorator("DELETE", path)
-    def patch(self, path: str): return self._decorator("PATCH", path)
+    def get(self, path: str):
+        return self._decorator("GET", path)
 
+    def post(self, path: str):
+        return self._decorator("POST", path)
+
+    def put(self, path: str):
+        return self._decorator("PUT", path)
+
+    def delete(self, path: str):
+        return self._decorator("DELETE", path)
+
+    def patch(self, path: str):
+        return self._decorator("PATCH", path)
