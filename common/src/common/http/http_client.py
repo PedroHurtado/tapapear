@@ -3,7 +3,7 @@ import inspect
 import httpx
 
 from contextvars import ContextVar
-from typing import Any, Callable, Optional, get_origin, get_args, Type
+from typing import Any, Callable, Optional, get_origin, get_args, Type, Dict
 from pydantic import BaseModel, create_model, ValidationError
 
 
@@ -27,7 +27,7 @@ class HttpClient:
         self,
         base_url: str,
         auth: Optional[httpx.Auth] = ContextAuth(),
-        headers: Optional[dict] = None,
+        headers: Optional[Dict] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
@@ -41,7 +41,7 @@ class HttpClient:
         args,
         kwargs,
         allow_anonymous: bool = False,
-        decorator_headers: dict = None,
+        decorator_headers: Optional[Dict] = None,
     ):
         sig = inspect.signature(func)
         bound = sig.bind_partial(*args, **kwargs)
@@ -133,7 +133,7 @@ class HttpClient:
         method: str,
         path: str,
         allow_anonymous: bool = False,
-        headers: dict = None,
+        headers: Optional[Dict] = None,
     ) -> Callable:
         def wrapper(func: Callable) -> Callable:
             @functools.wraps(func)
@@ -147,17 +147,47 @@ class HttpClient:
         return wrapper
 
     # Decoradores HTTP
-    def get(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+    def get(
+        self,
+        path: str,
+        *,
+        allow_anonymous: bool = False,
+        headers: Optional[Dict] = None,
+    ):
         return self._decorator("GET", path, allow_anonymous, headers)
 
-    def post(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+    def post(
+        self,
+        path: str,
+        *,
+        allow_anonymous: bool = False,
+        headers: Optional[Dict] = None,
+    ):
         return self._decorator("POST", path, allow_anonymous, headers)
 
-    def put(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+    def put(
+        self,
+        path: str,
+        *,
+        allow_anonymous: bool = False,
+        headers: Optional[Dict] = None,
+    ):
         return self._decorator("PUT", path, allow_anonymous, headers)
 
-    def delete(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+    def delete(
+        self,
+        path: str,
+        *,
+        allow_anonymous: bool = False,
+        headers: Optional[Dict] = None,
+    ):
         return self._decorator("DELETE", path, allow_anonymous, headers)
 
-    def patch(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+    def patch(
+        self,
+        path: str,
+        *,
+        allow_anonymous: bool = False,
+        headers: Optional[Dict] = None,
+    ):
         return self._decorator("PATCH", path, allow_anonymous, headers)
