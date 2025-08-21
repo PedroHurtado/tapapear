@@ -10,3 +10,5 @@ Estudio de Roles
 caches de servidor
 logger
 HttpClient
+	Estudiar los metodos anominos que pueden llamar a metodos internos
+	que requieran autenticación
