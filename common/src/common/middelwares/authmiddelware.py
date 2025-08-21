@@ -2,7 +2,7 @@ from starlette.types import ASGIApp,Scope,Receive,Send
 from fastapi import Request, HTTPException
 from common.security import Principal,principal_ctx
 from common.context import context
-from common.htto import jwt_token_var
+from common.http import jwt_token_var
 
 class AuthMiddleware:
     """Middleware para inyectar el Principal en el contexto."""
