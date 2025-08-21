@@ -25,7 +25,7 @@ HttpClient(X)
 
 	Ver si llevo a config.yaml las configuraciones de HttpClient
 
-	Agregar a los metodos especificos en el decorador headers y timeout
+	
 
 	Control de exceptions
 		Si es 404 y el metodo devuelve un optional devolver None

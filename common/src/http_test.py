@@ -22,7 +22,7 @@ class PostHttp:
 
 @inject
 async def main(http:PostHttp = deps(PostHttp)):    
-    post = await http.get(1)
+    post = await http.get(125)
     posts = await http.get_all()
     print(posts)
     print(post)
