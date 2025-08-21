@@ -1,14 +1,34 @@
 resolver uvicorn
+
 Firestore credentials
+
 refactorizar custom_openapy con claude  
+
 Ver errors middelware->Pasar a exception handler de fastapi
+
 Ver como devolver None en los controllers y que genere una respuesta
 vacia
+
 Estudio de Roles
 	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
+
 caches de servidor
+
 logger
-HttpClient
+
+HttpClient(X)
+	
 	Estudiar los metodos anominos que pueden llamar a metodos internos
-	que requieran autenticación
+	que requieran autenticación. En el decorador poner allow_anominus
+	y de esa forma que no se envie la cabecera autenticación
+
+	Ver si llevo a config.yaml las configuraciones de HttpClient
+
+	Agregar a los metodos especificos en el decorador headers y timeout
+
+	Control de exceptions
+		Si es 404 y el metodo devuelve un optional devolver None
+		En caso contrario generar el error 
+
+	Enviar FormData y application/x-www-form-urlencoded
