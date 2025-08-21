@@ -32,3 +32,58 @@ HttpClient(X)
 		En caso contrario generar el error 
 
 	Enviar y recibir FormData y application/x-www-form-urlencoded
+
+
+
+Claude
+
+from multipart import parse_form_data
+import httpx
+
+# Ejemplo de uso con response de httpx
+async def parse_multipart_response(response: httpx.Response):
+    content_type = response.headers.get("content-type", "")
+    
+    # parse_form_data necesita el content-type completo con boundary
+    # Ejemplo: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+    
+    # Parsear usando python-multipart
+    form_data = parse_form_data(response.content, content_type)
+    
+    # form_data es un dict-like object
+    result = {}
+    
+    for field_name, field_value in form_data.items():
+        if hasattr(field_value, 'file'):  # Es un archivo
+            result[field_name] = {
+                'content': field_value.file.read(),
+                'filename': getattr(field_value, 'filename', None),
+                'content_type': getattr(field_value, 'content_type', None)
+            }
+        else:  # Es un campo de texto
+            result[field_name] = field_value.value
+    
+    return result
+
+Chatgpt
+
+import httpx
+from multipart.multipart import parse_options_header
+from multipart import MultipartParser
+
+# Haces la request
+resp = httpx.get("https://example.com/multipart-response")
+
+# Extraes Content-Type (con el boundary)
+content_type = resp.headers.get("Content-Type")
+mime_type, options = parse_options_header(content_type)
+boundary = options.get("boundary").encode()
+
+# Parseas el cuerpo con python-multipart
+parser = MultipartParser(bytes(resp.content), boundary)
+
+for part in parser:
+    print("Nombre del campo:", part.name)
+    print("Nombre del fichero:", part.filename)
+    print("Cabeceras:", part.headers)
+    print("Contenido:", part.value)  # -> en bytes

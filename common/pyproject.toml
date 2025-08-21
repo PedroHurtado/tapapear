@@ -18,7 +18,8 @@ dependencies = [
     "inflect (>=7.5.0,<8.0.0)",    
     "pyyaml (>=6.0.2,<7.0.0)",    
     "python-dotenv (>=1.1.1,<2.0.0)",    
-    "httpx[http2] (>=0.28.1,<0.29.0)",
+    "httpx[http2] (>=0.28.1,<0.29.0)",    
+    "python-multipart (>=0.0.20,<0.0.21)",
 ]
 
 [tool.poetry]
