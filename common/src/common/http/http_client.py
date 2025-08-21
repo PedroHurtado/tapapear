@@ -34,7 +34,14 @@ class HttpClient:
         self.headers = headers or {}
 
     async def _build_request(
-        self, method: str, path: str, func: Callable, args, kwargs
+        self,
+        method: str,
+        path: str,
+        func: Callable,
+        args,
+        kwargs,
+        allow_anonymous: bool = False,
+        decorator_headers: dict = None,
     ):
         sig = inspect.signature(func)
         bound = sig.bind_partial(*args, **kwargs)
@@ -69,7 +76,17 @@ class HttpClient:
             if b is not None:
                 body = b.model_dump() if isinstance(b, BaseModel) else b
 
-        async with httpx.AsyncClient(auth=self.auth, headers=self.headers) as client:
+        # --- Combinar headers ---
+        combined_headers = {**self.headers}  # Empezar con headers de la clase
+        if decorator_headers:
+            combined_headers.update(decorator_headers)  # Agregar headers del decorador
+
+        # --- Determinar auth ---
+        auth_to_use = None if allow_anonymous else self.auth
+
+        async with httpx.AsyncClient(
+            auth=auth_to_use, headers=combined_headers
+        ) as client:
             response = await client.request(method, url, params=query, json=body)
             response.raise_for_status()
 
@@ -111,28 +128,36 @@ class HttpClient:
             return typ.model_validate(data)
         return data
 
-    def _decorator(self, method: str, path: str) -> Callable:
+    def _decorator(
+        self,
+        method: str,
+        path: str,
+        allow_anonymous: bool = False,
+        headers: dict = None,
+    ) -> Callable:
         def wrapper(func: Callable) -> Callable:
             @functools.wraps(func)
             async def inner(*args, **kwargs) -> Any:
-                return await self._build_request(method, path, func, args, kwargs)
+                return await self._build_request(
+                    method, path, func, args, kwargs, allow_anonymous, headers or {}
+                )
 
             return inner
 
         return wrapper
 
     # Decoradores HTTP
-    def get(self, path: str):
-        return self._decorator("GET", path)
+    def get(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+        return self._decorator("GET", path, allow_anonymous, headers)
 
-    def post(self, path: str):
-        return self._decorator("POST", path)
+    def post(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+        return self._decorator("POST", path, allow_anonymous, headers)
 
-    def put(self, path: str):
-        return self._decorator("PUT", path)
+    def put(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+        return self._decorator("PUT", path, allow_anonymous, headers)
 
-    def delete(self, path: str):
-        return self._decorator("DELETE", path)
+    def delete(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+        return self._decorator("DELETE", path, allow_anonymous, headers)
 
-    def patch(self, path: str):
-        return self._decorator("PATCH", path)
+    def patch(self, path: str, *, allow_anonymous: bool = False, headers: dict = None):
+        return self._decorator("PATCH", path, allow_anonymous, headers)

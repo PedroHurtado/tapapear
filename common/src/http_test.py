@@ -1,6 +1,7 @@
 import asyncio
 from common.http import HttpClient
 from common.ioc import component,ProviderType, container, inject,deps
+
 from pydantic import BaseModel
 from typing import List
 
@@ -19,11 +20,16 @@ class PostHttp:
     @http.get("/posts")
     async def get_all()->List[Post]:...
 
+    @http.post("/posts")
+    async def create(body:Post)->Post:...
+
 
 @inject
 async def main(http:PostHttp = deps(PostHttp)):    
-    post = await http.get(125)
+    post = await http.get(1)
     posts = await http.get_all()
+    newPost = Post(id=4, title="Nuevo Post")
+    post = await http.create(newPost)
     print(posts)
     print(post)
 

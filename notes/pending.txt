@@ -31,4 +31,4 @@ HttpClient(X)
 		Si es 404 y el metodo devuelve un optional devolver None
 		En caso contrario generar el error 
 
-	Enviar FormData y application/x-www-form-urlencoded
+	Enviar y recibir FormData y application/x-www-form-urlencoded
