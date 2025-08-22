@@ -3,9 +3,26 @@ import inspect
 import httpx
 from urllib.parse import parse_qs
 
+
 from contextvars import ContextVar
-from typing import Any, Callable, Optional, get_origin, get_args, Type, Dict, Annotated
+from typing import (
+    Any,
+    Callable,
+    Optional,
+    get_origin,
+    get_args,
+    Type,
+    Dict,
+    Annotated,
+    List,
+)
 from pydantic import BaseModel, create_model, ValidationError
+
+
+class File(BaseModel):
+    content: bytes
+    filename: Optional[str] = None
+    content_type: Optional[str] = None
 
 
 jwt_token_var: ContextVar[Optional[str]] = ContextVar("jwt_token", default=None)
@@ -35,28 +52,69 @@ class HttpClient:
         self.headers = headers or {}
 
     def _is_file_field(self, field_info) -> bool:
-        """Detecta si un campo es un archivo basándose en Annotated[bytes, "file"]"""
+        """Detecta si un campo es un archivo (File, Optional[File], List[File], Optional[List[File]])"""
         annotation = field_info.annotation
         origin = get_origin(annotation)
-        if origin is Annotated:
+
+        # Caso directo: File
+        if annotation is File:
+            return True
+
+        # Caso Optional[...] (Optional[T] se traduce a Union[T, NoneType])
+        if origin is Optional:
             args = get_args(annotation)
-            return len(args) >= 2 and args[1] == "file"
+            return any(
+                self._is_file_field(type("Tmp", (), {"annotation": arg}))
+                for arg in args
+                if arg is not type(None)
+            )
+
+        # Caso List[File]
+        if origin is list or origin is List:
+            args = get_args(annotation)
+            return len(args) == 1 and args[0] is File
+
         return False
 
     def _prepare_form_data(self, form_model: BaseModel):
         """Separa los datos de form en data (texto) y files (archivos)"""
         form_dict = form_model.model_dump()
-        data = {}
-        files = {}
+        data: dict = {}
+        files: list = []  # Sequence[Tuple[str, FileTypes]]
 
-        for field_name, field_info in form_model.model_fields.items():
+        for field_name, field_info in form_model.__class__.model_fields.items():
             field_value = form_dict.get(field_name)
 
             if field_value is None:
                 continue
 
             if self._is_file_field(field_info):
-                files[field_name] = field_value
+                # Lista de ficheros
+                if isinstance(field_value, list):
+                    for f in field_value:
+                        files.append(
+                            (
+                                field_name,
+                                (
+                                    f.get("filename", "upload"),
+                                    f.get("content"),
+                                    f.get("content_type", "application/octet-stream"),
+                                ),
+                            )
+                        )
+                # Fichero único
+                else:
+                    f = field_value
+                    files.append(
+                        (
+                            field_name,
+                            (
+                                f.get("filename", "upload"),
+                                f.get("content"),
+                                f.get("content_type", "application/octet-stream"),
+                            ),
+                        )
+                    )
             else:
                 data[field_name] = field_value
 
@@ -138,28 +196,30 @@ class HttpClient:
         return self._parse_response(response, func)
 
     def _parse_response(self, response: httpx.Response, func: Callable):
-        return_type = inspect.signature(func).return_annotation
-
         if response.status_code == 204:  # No Content
             return ""
 
+        return_type = inspect.signature(func).return_annotation
         content_type = response.headers.get("content-type", "").lower()
 
         # Parsing según Content-Type
         if "application/json" in content_type:
             data = response.json()
-        elif "application/x-www-form-urlencoded" in content_type:
-            # Parse form urlencoded response
-            parsed = parse_qs(response.text)
-            # Convertir listas de un elemento a valores únicos
-            data = {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
-        elif "multipart/form-data" in content_type:
-            # Para multipart en respuestas, httpx no tiene parser built-in
-            # Tendríamos que usar una librería como python-multipart
-            # Por ahora retornamos el texto raw
-            data = response.text
+        elif content_type.startswith("application/"):  # Cualquier tipo binario → fichero
+            content_disp = response.headers.get("content-disposition", "")
+            if "filename=" in content_disp:
+                filename = content_disp.split("filename=")[1].strip('"')
+            else:
+                filename = None
+
+            # Convertir a diccionario compatible con tu modelo File
+            data = {
+                "content": response.content,
+                "filename": filename,
+                "content_type": content_type
+            }
         else:
-            # Default: tratar como JSON
+            # Default: tratar como texto plano
             try:
                 data = response.json()
             except:
