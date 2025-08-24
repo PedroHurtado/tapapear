@@ -1,9 +1,7 @@
 import functools
 import inspect
 import httpx
-from urllib.parse import parse_qs
-
-
+import re
 from contextvars import ContextVar
 from typing import (
     Any,
@@ -13,10 +11,11 @@ from typing import (
     get_args,
     Type,
     Dict,
-    Annotated,
     List,
 )
 from pydantic import BaseModel, create_model, ValidationError
+from dataclasses import dataclass
+from enum import Enum
 
 
 class File(BaseModel):
@@ -28,14 +27,33 @@ class File(BaseModel):
 jwt_token_var: ContextVar[Optional[str]] = ContextVar("jwt_token", default=None)
 
 
+class RequestType(Enum):
+    QUERY = "query"
+    BODY = "body"
+    FORM = "form"
+    FORM_DATA = "form_data"
+
+
+@dataclass
+class CompiledRequest:
+    """Estructura compilada para optimizar las requests"""
+
+    param_model: Type[BaseModel]
+    path_params: List[str]
+    request_type: Optional[RequestType]
+    return_type: Type
+    is_return_list: bool
+    is_return_file: bool
+    has_files_in_form: bool
+    has_files_in_body: bool
+    body_file_field: Optional[str]
+
+
 class ContextAuth(httpx.Auth):
-    """
-    Auth class que obtiene el JWT desde un contextvar y lo añade al header Authorization.
-    """
+    """Auth que obtiene el JWT desde un contextvar y lo añade al header Authorization."""
 
     def auth_flow(self, request: httpx.Request):
-        token = jwt_token_var.get()
-        if token:
+        if token := jwt_token_var.get():
             request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
@@ -50,208 +68,299 @@ class HttpClient:
         self.base_url = base_url.rstrip("/")
         self.auth = auth
         self.headers = headers or {}
+        self._compiled_cache: Dict[str, CompiledRequest] = {}
 
-    def _is_file_field(self, field_info) -> bool:
-        """Detecta si un campo es un archivo (File, Optional[File], List[File], Optional[List[File]])"""
-        annotation = field_info.annotation
-        origin = get_origin(annotation)
+    def _is_file_type(self, annotation) -> bool:
+        """Detecta si una anotación es de tipo File"""
+        match annotation:
+            case _ if annotation is File:
+                return True
+            case _ if get_origin(annotation) is list:
+                args = get_args(annotation)
+                return len(args) == 1 and args[0] is File
+            case _:
+                return False
 
-        # Caso directo: File
-        if annotation is File:
-            return True
+    def _has_file_fields(self, model_class: Type[BaseModel]) -> bool:
+        """Comprueba si un modelo Pydantic contiene campos de tipo File"""
+        return any(
+            self._is_file_type(field.annotation)
+            for field in model_class.model_fields.values()
+        )
 
-        # Caso Optional[...] (Optional[T] se traduce a Union[T, NoneType])
-        if origin is Optional:
-            args = get_args(annotation)
-            return any(
-                self._is_file_field(type("Tmp", (), {"annotation": arg}))
-                for arg in args
-                if arg is not type(None)
-            )
+    def _extract_path_params(self, path: str) -> List[str]:
+        """Extrae los parámetros de la ruta"""
+        return re.findall(r"\{([^}]+)\}", path)
 
-        # Caso List[File]
-        if origin is list or origin is List:
-            args = get_args(annotation)
-            return len(args) == 1 and args[0] is File
+    def _compile_request(self, func: Callable, path: str) -> CompiledRequest:
+        """Compila la información del request una sola vez"""
+        sig = inspect.signature(func)
+        fields = {}
+        path_params = self._extract_path_params(path)
 
-        return False
+        request_type, has_files_in_form, has_files_in_body, body_file_field = (
+            self._detect_request_info(sig)
+        )
 
-    def _prepare_form_data(self, form_model: BaseModel):
-        """Separa los datos de form en data (texto) y files (archivos)"""
-        form_dict = form_model.model_dump()
-        data: dict = {}
-        files: list = []  # Sequence[Tuple[str, FileTypes]]
-
-        for field_name, field_info in form_model.__class__.model_fields.items():
-            field_value = form_dict.get(field_name)
-
-            if field_value is None:
+        for name, param in sig.parameters.items():
+            if name == "self":
                 continue
+            annotation = param.annotation
+            default = param.default if param.default is not inspect._empty else ...
+            fields[name] = (annotation, default)
 
-            if self._is_file_field(field_info):
-                # Lista de ficheros
-                if isinstance(field_value, list):
-                    for f in field_value:
-                        files.append(
-                            (
+        param_model = create_model(f"{func.__name__}Params", **fields)
+
+        actual_return_type, is_return_list, is_return_file = self._detect_return_type(
+            sig.return_annotation
+        )
+
+        return CompiledRequest(
+            param_model,
+            path_params,
+            request_type,
+            actual_return_type,
+            is_return_list,
+            is_return_file,
+            has_files_in_form,
+            has_files_in_body,
+            body_file_field,
+        )
+
+    def _detect_request_info(self, sig: inspect.Signature):
+        """Detecta el tipo de request y si contiene archivos"""
+        request_type = None
+        has_files_in_form = has_files_in_body = False
+        body_file_field = None
+
+        for name, param in sig.parameters.items():
+            if name == "self":
+                continue
+            annotation = param.annotation
+
+            match name:
+                case "query" | "body" | "form" | "form_data":
+                    request_type = RequestType(name)
+                    if name in {"form", "form_data"} and hasattr(
+                        annotation, "model_fields"
+                    ):
+                        has_files_in_form = self._has_file_fields(annotation)
+                    elif name == "body" and hasattr(annotation, "model_fields"):
+                        has_files_in_body = self._has_file_fields(annotation)
+                        if has_files_in_body:
+                            for (
                                 field_name,
-                                (
-                                    f.get("filename", "upload"),
-                                    f.get("content"),
-                                    f.get("content_type", "application/octet-stream"),
-                                ),
-                            )
-                        )
-                # Fichero único
-                else:
-                    f = field_value
-                    files.append(
-                        (
-                            field_name,
-                            (
-                                f.get("filename", "upload"),
-                                f.get("content"),
-                                f.get("content_type", "application/octet-stream"),
-                            ),
-                        )
-                    )
-            else:
-                data[field_name] = field_value
+                                field_info,
+                            ) in annotation.model_fields.items():
+                                if self._is_file_type(field_info.annotation):
+                                    body_file_field = field_name
+                                    if field_info.annotation is File:
+                                        break
+                case _:
+                    pass
+        return request_type, has_files_in_form, has_files_in_body, body_file_field
 
-        return (data if data else None), (files if files else None)
+    def _detect_return_type(self, return_annotation):
+        """Detecta tipo de retorno y si es lista o archivo"""
+        if return_annotation == inspect.Signature.empty:
+            return return_annotation, False, False
 
-    async def _build_request(
+        origin = get_origin(return_annotation)
+        args = get_args(return_annotation)
+        is_return_list, actual_return_type = False, return_annotation
+
+        match origin:
+            case _ if origin is list and args:
+                is_return_list = True
+                actual_return_type = args[0]
+            case _:
+                pass
+
+        return actual_return_type, is_return_list, actual_return_type is File
+
+    async def _send_request(
         self,
         method: str,
         path: str,
-        func: Callable,
+        compiled_req: CompiledRequest,
+        args,
+        kwargs,
+        allow_anonymous: bool = False,
+        decorator_headers: Optional[Dict] = None,
+    ) -> Any:
+
+        request = self._build_request(
+            method, path, compiled_req, args, kwargs, allow_anonymous, decorator_headers
+        )
+
+        method, url = request.pop("method"), request.pop("url")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.request(method, url, **request)
+            response.raise_for_status()
+
+        return self._parse_response(response, compiled_req)
+
+    def _build_request(
+        self,
+        method: str,
+        path: str,
+        compiled_req: CompiledRequest,
         args,
         kwargs,
         allow_anonymous: bool = False,
         decorator_headers: Optional[Dict] = None,
     ):
-        sig = inspect.signature(func)
-        bound = sig.bind_partial(*args, **kwargs)
-        bound.apply_defaults()
+        validated = self._validate_args(compiled_req, args, kwargs)
 
-        # --- validar args con Pydantic ---
-        fields = {
-            name: (
-                param.annotation,
-                param.default if param.default is not inspect._empty else ...,
-            )
-            for name, param in sig.parameters.items()
+        # Path params
+        url_params = {
+            p: getattr(validated, p)
+            for p in compiled_req.path_params
+            if hasattr(validated, p)
         }
-        Model = create_model(f"{func.__name__}Params", **fields)  # modelo dinámico
+        url = f"{self.base_url}{path.format(**url_params)}"
+
+        # Headers combinados
+        combined_headers = {**self.headers, **(decorator_headers or {})}
+
+        # Construcción según tipo de request
+        query = json_body = form_data = files = content = None
+
+        match compiled_req.request_type:
+            case RequestType.QUERY:
+                query = self._build_query_request(validated)
+
+            case RequestType.BODY:
+                json_body, content, combined_headers = self._build_body_request(
+                    validated, compiled_req, combined_headers
+                )
+
+            case RequestType.FORM:
+                form_data, files = self._build_form_request(validated, compiled_req)
+
+            case RequestType.FORM_DATA:
+                form_data, files = self._build_form_data_request(validated)
+
+            case _:
+                pass
+
+        return {
+            "method": method,
+            "url": url,
+            "auth": None if allow_anonymous else self.auth,
+            "headers": combined_headers,
+            "params": query,
+            "json": json_body,
+            "data": form_data,
+            "files": files,
+            "content": content,
+        }
+
+    def _validate_args(self, compiled_req: CompiledRequest, args, kwargs):
+        """Valida los argumentos contra el modelo Pydantic"""
+        bound_args = {}
+        if args:
+            param_names = list(compiled_req.param_model.model_fields.keys())
+            for i, arg in enumerate(args[1:]):  # saltar self
+                if i < len(param_names):
+                    bound_args[param_names[i]] = arg
+        bound_args.update(kwargs)
+
         try:
-            validated = Model(**bound.arguments)
+            return compiled_req.param_model(**bound_args)
         except ValidationError as e:
-            raise ValueError(f"Invalid arguments for {func.__name__}: {e}") from e
+            func_name = getattr(args[0], "__class__", {}).get("__name__", "unknown")
+            raise ValueError(f"Invalid arguments for {func_name}: {e}") from e
 
-        # --- Path params ---
-        url = f"{self.base_url}{path.format(**validated.model_dump())}"
+    def _build_query_request(self, validated):
+        query_obj = getattr(validated, "query", None)
+        if query_obj is None:
+            return None
+        return query_obj.model_dump() if isinstance(query_obj, BaseModel) else query_obj
 
-        # --- Query, Body, Form & Form Data ---
-        query = None
-        body = None
-        data = None
-        files = None
+    def _build_body_request(self, validated, compiled_req, headers: Dict):
+        body_obj = getattr(validated, "body", None)
+        if body_obj is None:
+            return None, None, headers
 
-        if "query" in validated.model_fields_set:
-            q = getattr(validated, "query")
-            if q is not None:
-                query = q.model_dump() if isinstance(q, BaseModel) else q
+        if compiled_req.has_files_in_body and compiled_req.body_file_field:
+            file_data = getattr(body_obj, compiled_req.body_file_field)
+            if isinstance(file_data, list):
+                content = b"".join(f.content for f in file_data)
+                if (
+                    not headers.get("Content-Type")
+                    and file_data
+                    and file_data[0].content_type
+                ):
+                    headers["Content-Type"] = file_data[0].content_type
+            else:
+                content = file_data.content
+                if not headers.get("Content-Type") and file_data.content_type:
+                    headers["Content-Type"] = file_data.content_type
+            return None, content, headers
+        return body_obj.model_dump(), None, headers
 
-        if "body" in validated.model_fields_set:
-            b = getattr(validated, "body")
-            if b is not None:
-                body = b.model_dump() if isinstance(b, BaseModel) else b
+    def _build_form_request(self, validated, compiled_req):
+        form_obj = getattr(validated, "form", None)
+        if form_obj is None:
+            return None, None
+        if compiled_req.has_files_in_form:
+            return self._prepare_files_data(form_obj)
+        return form_obj.model_dump(), None
 
-        if "form" in validated.model_fields_set:
-            f = getattr(validated, "form")
-            if f is not None:
-                data = f.model_dump() if isinstance(f, BaseModel) else f
+    def _build_form_data_request(self, validated):
+        form_data_obj = getattr(validated, "form_data", None)
+        if form_data_obj is None:
+            return None, None
+        return self._prepare_files_data(form_data_obj)
 
-        if "form_data" in validated.model_fields_set:
-            fd = getattr(validated, "form_data")
-            if fd is not None:
-                data, files = self._prepare_form_data(fd)
-
-        # --- Combinar headers ---
-        combined_headers = {**self.headers}  # Empezar con headers de la clase
-        if decorator_headers:
-            combined_headers.update(decorator_headers)  # Agregar headers del decorador
-
-        # --- Determinar auth ---
-        auth_to_use = None if allow_anonymous else self.auth
-
-        async with httpx.AsyncClient(
-            auth=auth_to_use, headers=combined_headers
-        ) as client:
-            response = await client.request(
-                method, url, params=query, json=body, data=data, files=files
-            )
-            response.raise_for_status()
-
-        return self._parse_response(response, func)
-
-    def _parse_response(self, response: httpx.Response, func: Callable):
-        if response.status_code == 204:  # No Content
+    def _parse_response(self, response: httpx.Response, compiled_req: CompiledRequest):
+        """Parsea la respuesta según las especificaciones"""
+        if response.status_code == 204:
             return ""
 
-        return_type = inspect.signature(func).return_annotation
         content_type = response.headers.get("content-type", "").lower()
 
-        # Parsing según Content-Type
-        if "application/json" in content_type:
+        # Caso File
+        if compiled_req.is_return_file:
+            filename = "upload"
+            if "filename=" in (cd := response.headers.get("content-disposition", "")):
+                filename = cd.split("filename=")[1].strip('"')
+            return File.model_validate(
+                {
+                    "content": response.content,
+                    "filename": filename,
+                    "content_type": content_type or "application/octet-stream",
+                }
+            )
+
+        # Caso JSON o fallback
+        try:
             data = response.json()
-        elif content_type.startswith("application/"):  # Cualquier tipo binario → fichero
-            content_disp = response.headers.get("content-disposition", "")
-            if "filename=" in content_disp:
-                filename = content_disp.split("filename=")[1].strip('"')
-            else:
-                filename = None
+        except ValueError:
+            data = response.text
 
-            # Convertir a diccionario compatible con tu modelo File
-            data = {
-                "content": response.content,
-                "filename": filename,
-                "content_type": content_type
-            }
-        else:
-            # Default: tratar como texto plano
-            try:
-                data = response.json()
-            except:
-                data = response.text
-
-        # No return annotation → raw data
-        if return_type is inspect.Signature.empty:
+        if compiled_req.return_type == inspect.Signature.empty:
             return data
 
-        origin = get_origin(return_type)
-        args = get_args(return_type)
+        if compiled_req.is_return_list:
+            return (
+                []
+                if data is None
+                else [
+                    self._parse_model(compiled_req.return_type, item) for item in data
+                ]
+            )
 
-        # Optional[T]
-        if origin is Optional and args:
-            inner = args[0]
-            if data is None:
-                return None
-            return self._parse_model(inner, data)
-
-        # List[T] or Optional[List[T]]
-        if origin is list or (origin is Optional and get_origin(args[0]) is list):
-            inner = args[0] if origin is list else get_args(args[0])[0]
-            if data is None:
-                return None
-            return [self._parse_model(inner, item) for item in data]
-
-        return self._parse_model(return_type, data)
+        return self._parse_model(compiled_req.return_type, data)
 
     def _parse_model(self, typ: Type, data: Any):
-        if inspect.isclass(typ) and issubclass(typ, BaseModel):
-            return typ.model_validate(data)
-        return data
+        return (
+            typ.model_validate(data)
+            if inspect.isclass(typ) and issubclass(typ, BaseModel)
+            else data
+        )
 
     def _decorator(
         self,
@@ -261,10 +370,22 @@ class HttpClient:
         headers: Optional[Dict] = None,
     ) -> Callable:
         def wrapper(func: Callable) -> Callable:
+            cache_key = f"{func.__module__}.{func.__qualname__}"
+            compiled_req = self._compiled_cache.get(cache_key) or self._compile_request(
+                func, path
+            )
+            self._compiled_cache[cache_key] = compiled_req
+
             @functools.wraps(func)
             async def inner(*args, **kwargs) -> Any:
-                return await self._build_request(
-                    method, path, func, args, kwargs, allow_anonymous, headers or {}
+                return await self._send_request(
+                    method,
+                    path,
+                    compiled_req,
+                    args,
+                    kwargs,
+                    allow_anonymous,
+                    headers or {},
                 )
 
             return inner

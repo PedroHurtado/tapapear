@@ -4,11 +4,10 @@ from common.http import HttpClient, File as FileRequest
 from common.ioc import component, ProviderType, container, inject, deps
 
 from pydantic import BaseModel
-from typing import List, Annotated
+from typing import List
 
-from fastapi import FastAPI, Form, UploadFile, File
-from contextlib import asynccontextmanager
-import threading
+
+
 
 
 http = HttpClient("http://localhost:8081")
