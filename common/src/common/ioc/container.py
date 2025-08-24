@@ -22,25 +22,26 @@ class AppContainer(containers.DynamicContainer):
 
             kwargs = {}
             
-            
-            if inspect.isclass(cls):                
-                sig = inspect.signature(cls.__init__)
-                param_iter = (param for param in sig.parameters.values() if param.name != "self")
-            elif callable(cls):                
-                sig = inspect.signature(cls)
-                param_iter = sig.parameters.values()
-            else:                
-                param_iter = []
-            
-            # Procesar parámetros para encontrar dependencias
-            for param in param_iter:
-                ann = param.annotation
-                if ann != inspect.Parameter.empty:
-                    dep_key = get_component_key(ann)
-                    if dep_key not in component_registry:
-                        raise ValueError(f"Missing dependency: {dep_key}")
-                    # Referenciar al provider, no al contenedor
-                    kwargs[param.name] = getattr(self, dep_key.replace('.', '_'))
+            # Solo inspeccionar parámetros si NO es OBJECT
+            if provider_type != ProviderType.OBJECT:
+                if inspect.isclass(cls):                
+                    sig = inspect.signature(cls.__init__)
+                    param_iter = (param for param in sig.parameters.values() if param.name != "self")
+                elif callable(cls):                
+                    sig = inspect.signature(cls)
+                    param_iter = sig.parameters.values()
+                else:                
+                    param_iter = []
+                
+                # Procesar parámetros para encontrar dependencias
+                for param in param_iter:
+                    ann = param.annotation
+                    if ann != inspect.Parameter.empty:
+                        dep_key = get_component_key(ann)
+                        if dep_key not in component_registry:
+                            raise ValueError(f"Missing dependency: {dep_key}")
+                        # Referenciar al provider, no al contenedor
+                        kwargs[param.name] = getattr(self, dep_key.replace('.', '_'))
 
             # Crear el provider según el tipo
             match provider_type:
@@ -65,6 +66,7 @@ class AppContainer(containers.DynamicContainer):
         if not self._built:
             self._build()
         super().wire(modules=modules)
+    
     def unwire(self):
         super().unwire()
 
