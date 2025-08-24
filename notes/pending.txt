@@ -18,17 +18,10 @@ caches de servidor
 logger
 
 HttpClient(X)	
-
 	Ver si llevo a config.yaml las configuraciones de HttpClient	
-
 	Control de exceptions
-		Si es 404 y el metodo devuelve un optional devolver None
-		En caso contrario generar el error 
-	Subir un solo archivo
-	Subir una lista
-    Gestión de ficheros grandes
-    Quitar todos los Optional[List[File]] en el envio y dejar solo 
-    List[File]
+		
+	
 
 	
 
