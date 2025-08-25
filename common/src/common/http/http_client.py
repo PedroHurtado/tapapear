@@ -20,11 +20,22 @@ from pydantic import BaseModel, create_model, ValidationError
 from dataclasses import dataclass
 from enum import Enum
 
+
 class HTTPRetryError(Exception):
-    def __init__(self, message: str, last_exception: Exception, attempts: int):
+    def __init__(
+        self,
+        message: str,
+        cause: Exception,
+        attempts: int,
+        url: str,
+        status_code: Optional[int],
+    ):
         super().__init__(message)
-        self.last_exception = last_exception
+        self.cause = cause
         self.attempts = attempts
+        self.status_code = status_code
+        self.url = url
+
 
 jwt_token_var: ContextVar[Optional[str]] = ContextVar("jwt_token", default=None)
 
@@ -597,42 +608,6 @@ class HttpClient:
         self.response_parser = ResponseParser()
         self.argument_validator = ArgumentValidator()
 
-    async def _send_request(
-        self, method: str, request: Dict[str, Any]
-    ) -> httpx.Response:
-        url = request.pop("url")
-        last_exception = None
-        
-        for attempt in range(self.max_retries + 1):
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.request(method, url, **request)
-                    response.raise_for_status()
-                    return response
-                    
-            except Exception as e:
-                last_exception = e
-                should_retry = False
-                
-                if isinstance(e, httpx.HTTPStatusError):
-                    should_retry = self._is_retryable_http_status_error(e)
-                else:
-                    should_retry = self._is_retryable_exception(e)
-                
-                if should_retry and attempt < self.max_retries:
-                    await self._calculate_backoff(attempt + 1)
-                    continue
-                else:
-                    if not should_retry:
-                        raise e
-                    break
-        
-        raise HTTPRetryError(
-            f"Request failed after {self.max_retries + 1} attempts. "
-            f"Last error: {type(last_exception).__name__}: {str(last_exception)}",
-            last_exception,
-            self.max_retries + 1
-        )
     def _is_retryable_exception(self, exception: Exception) -> bool:
         return type(exception) in self.retryable_exceptions
 
@@ -643,6 +618,47 @@ class HttpClient:
         if attempt > 0:
             wait_time = self.backoff_factor * (2 ** (attempt - 1))
             await asyncio.sleep(wait_time)
+
+    async def _send_request(
+        self, method: str, request: Dict[str, Any]
+    ) -> httpx.Response:
+        url = request.pop("url")
+        cause = None
+        status_code: Optional[int] = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.request(method, url, **request)
+                    status_code = response.status_code
+                    response.raise_for_status()
+                    return response
+
+            except Exception as e:
+                cause = e
+                should_retry = False
+
+                if isinstance(e, httpx.HTTPStatusError):
+                    should_retry = self._is_retryable_http_status_error(e)
+                else:
+                    should_retry = self._is_retryable_exception(e)
+
+                if should_retry and attempt < self.max_retries:
+                    await self._calculate_backoff(attempt + 1)
+                    continue
+                else:
+                    if not should_retry:
+                        raise e
+                    break
+
+        raise HTTPRetryError(
+            f"Request failed after {self.max_retries + 1} attempts. "
+            f"Last error: {type(cause).__name__}: {str(cause)}",
+            cause,
+            self.max_retries + 1,
+            url,
+            status_code,
+        )
 
     def _decorator(
         self,
