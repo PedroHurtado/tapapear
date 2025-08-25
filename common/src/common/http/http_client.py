@@ -2,6 +2,7 @@ import functools
 import inspect
 import httpx
 import re
+import asyncio
 from contextvars import ContextVar
 from typing import (
     Any,
@@ -19,6 +20,11 @@ from pydantic import BaseModel, create_model, ValidationError
 from dataclasses import dataclass
 from enum import Enum
 
+class HTTPRetryError(Exception):
+    def __init__(self, message: str, last_exception: Exception, attempts: int):
+        super().__init__(message)
+        self.last_exception = last_exception
+        self.attempts = attempts
 
 jwt_token_var: ContextVar[Optional[str]] = ContextVar("jwt_token", default=None)
 
@@ -549,12 +555,40 @@ class HttpClient:
         base_url: str,
         auth: Optional[httpx.Auth] = ContextAuth(),
         headers: Optional[Dict[str, str]] = None,
+        max_retries: int = 3,
+        backoff_factor: float = 1.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
         self.headers = headers or {}
         self._compiled_cache: Dict[str, CompiledRequest] = {}
+        self.retryable_exceptions: Set[type] = {
+            httpx.TimeoutException,
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            httpx.PoolTimeout,
+            httpx.NetworkError,
+            httpx.ConnectError,
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.ProtocolError,
+            httpx.RemoteProtocolError,
+            httpx.LocalProtocolError,
+        }
 
+        self.retryable_status_codes: Set[int] = {
+            408,
+            429,
+            502,
+            503,
+            504,
+            520,
+            521,
+            522,
+            523,
+            524,
+        }
         # Inicializar componentes
         self.type_inspector = TypeInspector()
         self.request_detector = RequestTypeDetector(self.type_inspector)
@@ -566,12 +600,49 @@ class HttpClient:
     async def _send_request(
         self, method: str, request: Dict[str, Any]
     ) -> httpx.Response:
-        """Envía la request HTTP"""
         url = request.pop("url")
-        async with httpx.AsyncClient() as client:
-            response = await client.request(method, url, **request)
-            response.raise_for_status()
-        return response
+        last_exception = None
+        
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.request(method, url, **request)
+                    response.raise_for_status()
+                    return response
+                    
+            except Exception as e:
+                last_exception = e
+                should_retry = False
+                
+                if isinstance(e, httpx.HTTPStatusError):
+                    should_retry = self._is_retryable_http_status_error(e)
+                else:
+                    should_retry = self._is_retryable_exception(e)
+                
+                if should_retry and attempt < self.max_retries:
+                    await self._calculate_backoff(attempt + 1)
+                    continue
+                else:
+                    if not should_retry:
+                        raise e
+                    break
+        
+        raise HTTPRetryError(
+            f"Request failed after {self.max_retries + 1} attempts. "
+            f"Last error: {type(last_exception).__name__}: {str(last_exception)}",
+            last_exception,
+            self.max_retries + 1
+        )
+    def _is_retryable_exception(self, exception: Exception) -> bool:
+        return type(exception) in self.retryable_exceptions
+
+    def _is_retryable_http_status_error(self, exception: httpx.HTTPStatusError) -> bool:
+        return exception.response.status_code in self.retryable_status_codes
+
+    async def _calculate_backoff(self, attempt: int) -> None:
+        if attempt > 0:
+            wait_time = self.backoff_factor * (2 ** (attempt - 1))
+            await asyncio.sleep(wait_time)
 
     def _decorator(
         self,
