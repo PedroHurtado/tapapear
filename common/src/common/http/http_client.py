@@ -24,11 +24,11 @@ from enum import Enum
 class HTTPRetryError(Exception):
     def __init__(
         self,
-        message: str,
-        cause: Exception,
+        message: str,        
         attempts: int,
         url: str,
-        status_code: Optional[int],
+        status_code: Optional[int]=None,
+        cause: Optional[Exception]=None,
     ):
         super().__init__(message)
         self.cause = cause
