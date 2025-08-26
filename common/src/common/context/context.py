@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, FrozenSet
+from typing import Dict, Any, FrozenSet,Type
 
 DOCS_PATHS: set[tuple[str, str]] = {
     ("/openapi.json", "GET"),
@@ -20,5 +20,8 @@ class Context(BaseModel):
     authorize_routes: set[tuple[str, str]] = Field(default_factory=set)
     docs_path: FrozenSet[tuple[str, str]] = Field(default_factory=lambda: frozenset(DOCS_PATHS))
     modules:set[str] = Field(default_factory=set)
+    commands:Dict[Type[Any], Type] = Field(default_factory=dict)
     
 context = Context()
+
+
