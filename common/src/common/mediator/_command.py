@@ -1,10 +1,25 @@
-from typing import TypeVar, Generic, List, Type, Optional, get_args, Dict, Any, Callable,cast
+from typing import (
+    TypeVar,
+    Generic,
+    List,
+    Type,
+    Optional,
+    get_args,
+    Dict,
+    Any,
+    Callable,
+    cast,
+    overload,
+    TYPE_CHECKING,
+    Union,
+)
 from common.openapi import FeatureModel
 from common.ioc import component, ProviderType, AppContainer
 from common.context import context
 from abc import ABC, abstractmethod, ABCMeta
 
 import inspect
+
 
 class Command(FeatureModel): ...
 
@@ -104,41 +119,93 @@ class PipeLine(ABC):
 component(List[PipeLine], provider_type=ProviderType.LIST)
 
 
+if TYPE_CHECKING:
+    from ._command import PipeLine  # Ajusta la importación según tu estructura
 
 
-def pipelines(*pipeline_classes: Type["PipeLine"]):
+@overload
+def pipelines() -> Callable[[Type[T]], Type[T]]:
+    """Decorador sin argumentos: @pipelines() -> __pipelines__ = []"""
+    ...
+
+
+@overload
+def pipelines(*pipeline_classes: Type["PipeLine"]) -> Callable[[Type[T]], Type[T]]:
+    """Decorador con argumentos: @pipelines(A, B, ...) -> __pipelines__ = [A, B, ...]"""
+    ...
+
+
+@overload
+def pipelines(cls: Type[T]) -> Type[T]:
+    """Decorador directo sin paréntesis: @pipelines -> __pipelines__ = []"""
+    ...
+
+
+def pipelines(
+    *pipeline_classes: Union[Type["PipeLine"], Type[T]]
+) -> Union[Type[T], Callable[[Type[T]], Type[T]]]:
     """
+    Decorador para asignar pipelines a una clase.
+
     Usos:
-      @pipelines            -> __pipelines__ = []  (anula todos)
-      @pipelines()          -> __pipelines__ = []  (anula todos)
-      @pipelines(A, B, ...) -> __pipelines__ = [A, B, ...] (solo esos)
+        @pipelines            -> __pipelines__ = []  (anula todos)
+        @pipelines()          -> __pipelines__ = []  (anula todos)
+        @pipelines(A, B, ...) -> __pipelines__ = [A, B, ...] (solo esos)
+
+    Args:
+        *pipeline_classes: Clases de pipeline a asignar
+
+    Returns:
+        La clase decorada con __pipelines__ asignado, o un decorador que lo hace
+
+    Examples:
+        @pipelines
+        class MyHandler:
+            def process(self): ...
+
+        @pipelines(ValidationPipeline, LoggingPipeline)
+        class MyHandler:
+            def process(self): ...
     """
 
-    # Caso: @pipelines sin paréntesis -> Python pasa la clase decorada aquí.
+    def apply_pipelines(
+        cls: Type[T], pipelines_list: list[Type["PipeLine"]]
+    ) -> Type[T]:
+        """
+        Aplica la lista de pipelines a la clase y preserva su tipo.
+
+        Args:
+            cls: La clase a decorar
+            pipelines_list: Lista de pipelines a asignar
+
+        Returns:
+            La misma clase con __pipelines__ asignado
+        """
+        setattr(cls, "__pipelines__", pipelines_list)
+        return cls
+
+    # Caso 1: @pipelines sin paréntesis -> Python pasa la clase decorada aquí
     if len(pipeline_classes) == 1 and inspect.isclass(pipeline_classes[0]):
         candidate = pipeline_classes[0]
+
         # Si candidate parece una Pipeline (tiene 'handler'), entonces NO es la clase
         # decorada sino un argumento del decorador (ej. @pipelines(A)), así que
         # devolvemos un decorator factory que usará esa clase pipeline.
         if hasattr(candidate, "handler"):
-            def decorator(cls: Type[Any]):
-                setattr(cls, "__pipelines__", [candidate])
-                return cls
-            return decorator
+
+            def decorator_with_pipeline(cls: Type[T]) -> Type[T]:
+                return apply_pipelines(cls, [candidate])  # type: ignore[arg-type]
+
+            return decorator_with_pipeline
 
         # Si no tiene 'handler', lo tratamos como la clase decorada: @pipelines
-        setattr(candidate, "__pipelines__", [])
-        return candidate
+        return apply_pipelines(candidate, [])  # type: ignore[arg-type]
 
-    # Caso general: @pipelines() o @pipelines(A,B,...)
-    def decorator(cls: Type[Any]):
-        setattr(cls, "__pipelines__", list(pipeline_classes))
-        return cls
+    # Caso 2: @pipelines() (sin argumentos) o @pipelines(A, B, ...) (con argumentos)
+    def decorator_factory(cls: Type[T]) -> Type[T]:
+        return apply_pipelines(cls, list(pipeline_classes))  # type: ignore[arg-type]
 
-    return decorator
-
-
-
+    return decorator_factory
 
 
 @component
@@ -161,7 +228,9 @@ class Mediator:
         service: CommandHadler = self._container.get(service_type)
 
         if hasattr(command_type, "__pipelines__"):
-            pipeline_classes: list[type[PipeLine]] = getattr(command_type, "__pipelines__")
+            pipeline_classes: list[type[PipeLine]] = getattr(
+                command_type, "__pipelines__"
+            )
             # Si el decorador está pero vacío → no se ejecuta ninguno
             if pipeline_classes:
                 pipelines = [p for p in self._pipelines if type(p) in pipeline_classes]
@@ -170,7 +239,7 @@ class Mediator:
         else:
             # Sin decorador → todos
             pipelines = list(self._pipelines)
-    
+
         pipelines.sort(key=lambda p: type(p).order)
 
         pipeline_context = PipelineContext(command)

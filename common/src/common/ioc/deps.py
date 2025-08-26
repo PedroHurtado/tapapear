@@ -6,13 +6,7 @@ from fastapi import Depends
 
 T = TypeVar("T")
 
-if TYPE_CHECKING:
-    # Durante type checking, deps devuelve directamente el tipo T
-    def deps(cls: Type[T]) -> T: ...
-else:
-    # Durante runtime, deps devuelve Depends
-    from fastapi import Depends    
-    def deps(cls: Type[T]) -> T:
-        return Depends(Provide[get_component_key(cls)])
+def deps(cls: Type[T]) -> T:
+   return Depends(Provide[get_component_key(cls)])
 
 
