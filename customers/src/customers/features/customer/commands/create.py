@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from common.ioc import component, deps, inject
 from common.infraestructure.repository import InjectsRepo, Add
-from common.openapi import FeatureModel
+from common.mediator import Command
 from common.server import build_router
 from customers.domain.customer import Customer, TaxType
 from customers.infraestructure.customer import Repository as repo
@@ -12,11 +12,11 @@ from datetime import datetime
 router = build_router("customers")
 
 
-class Request(FeatureModel):
+class Request(Command):
     name: str
 
 
-class Response(FeatureModel):
+class Response(Command):
     id: UUID
     name: str
 

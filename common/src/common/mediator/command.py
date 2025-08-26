@@ -1,0 +1,3 @@
+from common.openapi import FeatureModel
+
+class Command(FeatureModel):...
