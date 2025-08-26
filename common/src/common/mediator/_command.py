@@ -1,9 +1,10 @@
-from typing import TypeVar, Generic, List, Type, Optional, get_args, Dict, Any, Callable
+from typing import TypeVar, Generic, List, Type, Optional, get_args, Dict, Any, Callable,cast
 from common.openapi import FeatureModel
 from common.ioc import component, ProviderType, AppContainer
 from common.context import context
 from abc import ABC, abstractmethod, ABCMeta
 
+import inspect
 
 class Command(FeatureModel): ...
 
@@ -103,10 +104,7 @@ class PipeLine(ABC):
 component(List[PipeLine], provider_type=ProviderType.LIST)
 
 
-from typing import Type
 
-import inspect
-from typing import Type, Any
 
 def pipelines(*pipeline_classes: Type["PipeLine"]):
     """

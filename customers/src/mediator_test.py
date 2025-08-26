@@ -8,7 +8,7 @@ from common.mediator import (
     TransactionPipeLine,
 )
 
-@pipelines(LogggerPipeLine)
+@pipelines(LogggerPipeLine,TransactionPipeLine)
 class Request(Command):
     id: int
 
@@ -19,17 +19,19 @@ class Response(Command):
 
 @component
 class Service(CommandHadler[Request]):
-    def handler(self, command: Request) -> Response:
+    def handler(self, command: Request) -> Response:                
         print(command)
+        
         return Response(id=1)
 
 
 @inject
 def main(mediator:Mediator = deps(Mediator)):
     response = mediator.send(Request(id=1))
+    
     print(response)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     container.wire([__name__])
     main()
