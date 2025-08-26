@@ -11,7 +11,7 @@ class PipeLine: ...
 
 @component
 class Repository:
-    def __init__(self):
+    def __init__(self,Foo:Foo):
         pass
 
 
@@ -21,11 +21,11 @@ class Service:
         pass
 
 
-@component
+
 class PipeLineAuth(PipeLine):
     def __init__(self):
         pass
-
+component(PipeLineAuth, provider_type=ProviderType.SINGLETON)
 
 @component
 class Mediator:
@@ -39,7 +39,7 @@ component(List[PipeLine], provider_type=ProviderType.LIST)
 
 
 @inject
-def main(mediator: Mediator = deps(Mediator), foo = deps(Foo)):
+def main(mediator: Mediator = deps(Mediator)):
     pass
 
 

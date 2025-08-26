@@ -4,7 +4,8 @@ from common.infraestructure.repository import InjectsRepo, Add
 from common.openapi import FeatureModel
 from common.server import build_router
 from customers.domain.customer import Customer, TaxType
-from customers.infraestructure.customer import Repository as repo, mapper
+from customers.infraestructure.customer import Repository as repo
+from automapper import Mapper
 from uuid import uuid4, UUID
 from datetime import datetime
 
@@ -22,14 +23,15 @@ class Response(FeatureModel):
 
 @component
 class Repository(InjectsRepo, Add[Customer]):
-    def __init__(self, repo: repo, mapper=mapper):
+    def __init__(self, repo: repo, mapper:Mapper):
         super().__init__(repo, mapper)
 
 
 @component
 class Service:
-    def __init__(self, repository: Repository):
+    def __init__(self, repository: Repository, mapper:Mapper):
         self._repository = repository
+        self._mapper = mapper
 
     async def __call__(self, req: Request)->Response:
 
@@ -37,10 +39,10 @@ class Service:
         customer = Customer.create(
             uuid4(), req.name, "", "", "", datetime.now(), 200, tax_type, "52"
         )
-
+        
         await self._repository.create_async(customer)
 
-        return mapper.to(Response).map(customer)
+        return self._mapper.to(Response).map(customer)
 
 
 @router.post("", status_code=201, summary="Create Customer")

@@ -1,5 +1,5 @@
-from .mapper import get_mapper
+from .mapper import register_class
 
 __all__=[
-    "get_mapper"
+    "register_class"
 ]
