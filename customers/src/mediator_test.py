@@ -29,6 +29,7 @@ class Repository:
 
 
 @component
+@pipelines(LogggerPipeLine,TransactionPipeLine)
 class Service(CommandHadler[Request]):
     def __init__(self, repository:Repository):
         self._repository = repository  
@@ -39,7 +40,6 @@ class Service(CommandHadler[Request]):
         return Response(id=1)
 
 @inject
-@ignore_pipelines
 async def main(mediator:Mediator = deps(Mediator)):
     request= Request(id=1)
     print(f"petición del usuario {request}")
