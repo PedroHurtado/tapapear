@@ -35,14 +35,16 @@ class Service(CommandHadler[Request]):
 
     @inject  
     async def handler(self, command: Request, principal:Principal = deps(Principal)) -> Response:                                            
-        self._repository.save()
-        print(command)        
+        self._repository.save()        
         return Response(id=1)
 
 @inject
+@ignore_pipelines
 async def main(mediator:Mediator = deps(Mediator)):
-    response = await mediator.send(Request(id=1))        
-    print(response)
+    request= Request(id=1)
+    print(f"petición del usuario {request}")
+    response = await mediator.send(request)       
+    print(f"devolución a  usuario {response}")    
 
 
 if __name__ == "__main__":    
