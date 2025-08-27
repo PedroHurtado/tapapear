@@ -1,14 +1,20 @@
-from common.ioc import container, component, inject, deps
+import asyncio
+from common.ioc import container, component, inject, deps, ProviderType
 from common.mediator import (
     Mediator,
     CommandHadler,
     Command,
-    pipelines,
+    pipelines,    
+    ignore_pipelines,
     LogggerPipeLine,
     TransactionPipeLine,
 )
 
-@pipelines(LogggerPipeLine)
+@component(provider_type=ProviderType.FACTORY)
+class Principal:
+    def __init__(self):
+        print("Principal")
+
 class Request(Command):
     id: int
 
@@ -25,19 +31,20 @@ class Repository:
 @component
 class Service(CommandHadler[Request]):
     def __init__(self, repository:Repository):
-        self._repository = repository    
-    def handler(self, command: Request) -> Response:                                            
+        self._repository = repository  
+
+    @inject  
+    async def handler(self, command: Request, principal:Principal = deps(Principal)) -> Response:                                            
         self._repository.save()
         print(command)        
         return Response(id=1)
 
-
 @inject
-def main(mediator:Mediator = deps(Mediator)):
-    response = mediator.send(Request(id=1))    
+async def main(mediator:Mediator = deps(Mediator)):
+    response = await mediator.send(Request(id=1))        
     print(response)
 
 
 if __name__ == "__main__":    
     container.wire([__name__])
-    main()
+    asyncio.run(main())

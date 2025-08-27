@@ -7,18 +7,14 @@ from typing import (
     get_args,
     Dict,
     Any,
-    Callable,
-    cast,
+    Callable, 
     overload,
-    TYPE_CHECKING,
-    Union,
+    Awaitable
 )
 from common.openapi import FeatureModel
-from common.ioc import component, ProviderType, AppContainer
-from common.context import context
+from common.ioc import component, ProviderType
+from common.context import context, Context
 from abc import ABC, abstractmethod, ABCMeta
-
-import inspect
 
 
 class Command(FeatureModel): ...
@@ -116,157 +112,155 @@ class PipeLine(ABC):
         pass
 
 
-component(List[PipeLine], provider_type=ProviderType.LIST)
-
-
-if TYPE_CHECKING:
-    from ._command import PipeLine  # Ajusta la importación según tu estructura
-
-
-@overload
-def pipelines() -> Callable[[Type[T]], Type[T]]:
-    """Decorador sin argumentos: @pipelines() -> __pipelines__ = []"""
-    ...
-
-
-@overload
 def pipelines(*pipeline_classes: Type["PipeLine"]) -> Callable[[Type[T]], Type[T]]:
-    """Decorador con argumentos: @pipelines(A, B, ...) -> __pipelines__ = [A, B, ...]"""
-    ...
-
-
-@overload
-def pipelines(cls: Type[T]) -> Type[T]:
-    """Decorador directo sin paréntesis: @pipelines -> __pipelines__ = []"""
-    ...
-
-
-def pipelines(
-    *pipeline_classes: Union[Type["PipeLine"], Type[T]]
-) -> Union[Type[T], Callable[[Type[T]], Type[T]]]:
     """
-    Decorador para asignar pipelines a una clase.
-
-    Usos:
-        @pipelines            -> __pipelines__ = []  (anula todos)
-        @pipelines()          -> __pipelines__ = []  (anula todos)
-        @pipelines(A, B, ...) -> __pipelines__ = [A, B, ...] (solo esos)
+    Decorador para asignar pipelines específicos a una clase.
 
     Args:
         *pipeline_classes: Clases de pipeline a asignar
 
     Returns:
-        La clase decorada con __pipelines__ asignado, o un decorador que lo hace
-
-    Examples:
-        @pipelines
-        class MyHandler:
-            def process(self): ...
-
-        @pipelines(ValidationPipeline, LoggingPipeline)
-        class MyHandler:
-            def process(self): ...
+        Un decorador que asigna __pipelines__ con la lista de pipelines especificados
     """
 
-    def apply_pipelines(
-        cls: Type[T], pipelines_list: list[Type["PipeLine"]]
-    ) -> Type[T]:
-        """
-        Aplica la lista de pipelines a la clase y preserva su tipo.
-
-        Args:
-            cls: La clase a decorar
-            pipelines_list: Lista de pipelines a asignar
-
-        Returns:
-            La misma clase con __pipelines__ asignado
-        """
-        setattr(cls, "__pipelines__", pipelines_list)
+    def decorator(cls: Type[T]) -> Type[T]:
+        setattr(cls, "__pipelines__", list(pipeline_classes))
         return cls
 
-    # Caso 1: @pipelines sin paréntesis -> Python pasa la clase decorada aquí
-    if len(pipeline_classes) == 1 and inspect.isclass(pipeline_classes[0]):
-        candidate = pipeline_classes[0]
+    return decorator
 
-        # Si candidate parece una Pipeline (tiene 'handler'), entonces NO es la clase
-        # decorada sino un argumento del decorador (ej. @pipelines(A)), así que
-        # devolvemos un decorator factory que usará esa clase pipeline.
-        if hasattr(candidate, "handler"):
 
-            def decorator_with_pipeline(cls: Type[T]) -> Type[T]:
-                return apply_pipelines(cls, [candidate])  # type: ignore[arg-type]
+@overload
+def ignore_pipelines() -> Callable[[Type[T]], Type[T]]:
+    """Decorador con paréntesis: @ignore_pipelines() -> __pipelines__ = []"""
+    ...
 
-            return decorator_with_pipeline
 
-        # Si no tiene 'handler', lo tratamos como la clase decorada: @pipelines
-        return apply_pipelines(candidate, [])  # type: ignore[arg-type]
+@overload
+def ignore_pipelines(cls: Type[T]) -> Type[T]:
+    """Decorador directo: @ignore_pipelines -> __pipelines__ = []"""
+    ...
 
-    # Caso 2: @pipelines() (sin argumentos) o @pipelines(A, B, ...) (con argumentos)
-    def decorator_factory(cls: Type[T]) -> Type[T]:
-        return apply_pipelines(cls, list(pipeline_classes))  # type: ignore[arg-type]
 
-    return decorator_factory
+def ignore_pipelines(
+    cls: Type[T] = None
+) -> Type[T] | Callable[[Type[T]], Type[T]]:
+    """
+    Decorador para desactivar la ejecución de pipelines en una clase.
+
+    Returns:
+        La clase decorada con __pipelines__ = [], o un decorador que lo hace
+    """
+    def apply_ignore(target_cls: Type[T]) -> Type[T]:
+        setattr(target_cls, "__pipelines__", [])
+        return target_cls
+
+    if cls is None:
+        # Caso: @ignore_pipelines()
+        return apply_ignore
+    else:
+        # Caso: @ignore_pipelines
+        return apply_ignore(cls)
+
+
+
+class CacheEntry:
+    def __init__(
+        self,
+        command_handler: CommandHadler,
+        pipelines: List[PipeLine],
+        chain_factory: Callable[[PipelineContext], Callable[[], Awaitable]]
+    ):
+        self.command_handler = command_handler
+        self.pipelines = pipelines
+        self.chain_factory = chain_factory
 
 
 @component
 class Mediator:
-    def __init__(self, pipelines: List[PipeLine], container: AppContainer):
-        if container is None:
-            raise ValueError("container no puede ser None")
-
+    def __init__(
+        self,
+        commands_handlers: List[CommandHadler],
+        pipelines: List[PipeLine],
+        context: Context
+    ):
+        self._commands_handlers = commands_handlers
         self._pipelines = pipelines or []
-        self._container = container
+        self._handler_cache: Dict[Type[Command], CacheEntry] = {}
         self._context = context
 
-    def send(self, command: Command):
+    async def send(self, command: Command):
         command_type = type(command)
+        
+        if command_type not in self._handler_cache:
+            self._build_cache_entry(command_type)
+        
+        cache_entry = self._handler_cache[command_type]
+        pipeline_context = PipelineContext(command)
+        chain = cache_entry.chain_factory(pipeline_context)
+        return await chain()
+    
+    def _build_cache_entry(self, command_type: Type[Command]):
         service_type = self._context.commands.get(command_type, None)
-
         if service_type is None:
-            raise ValueError(f"{service_type} no tiene registrado un command handler")
+            raise ValueError(f"{command_type} no tiene registrado un command handler")
 
-        service: CommandHadler = self._container.get(service_type)
-
-        if hasattr(command_type, "__pipelines__"):
-            pipeline_classes: list[type[PipeLine]] = getattr(
-                command_type, "__pipelines__"
-            )
-            # Si el decorador está pero vacío → no se ejecuta ninguno
+        service = self._find_command_handler(service_type)
+        pipelines = self._resolve_pipelines(service)
+        chain_factory = self._create_chain_factory(service, pipelines)
+        
+        self._handler_cache[command_type] = CacheEntry(service, pipelines, chain_factory)
+    
+    def _find_command_handler(self, service_type: Type) -> CommandHadler:
+        service = next((cmd for cmd in self._commands_handlers if type(cmd) == service_type), None)
+        if service is None:
+            raise ValueError(f"No se encontró instancia del handler {service_type}")
+        return service
+    
+    def _resolve_pipelines(self, handler: CommandHadler) -> List[PipeLine]:
+        handler_class = type(handler)
+        
+        if hasattr(handler_class, "__pipelines__"):
+            pipeline_classes = getattr(handler_class, "__pipelines__")
             if pipeline_classes:
                 pipelines = [p for p in self._pipelines if type(p) in pipeline_classes]
+                # Si hay decorador con pipelines específicos, mantener orden de declaración
             else:
                 pipelines = []
         else:
-            # Sin decorador → todos
+            # Solo ordenar cuando no hay decorador (todos los pipelines)
             pipelines = list(self._pipelines)
-
-        pipelines.sort(key=lambda p: type(p).order)
-
-        pipeline_context = PipelineContext(command)
-
-        def create_chain():
-            # El último handler es el service
-            def service_handler():
-                if pipeline_context.cancelled:
+            pipelines.sort(key=lambda p: type(p).order)
+        
+        return pipelines
+    
+    def _create_chain_factory(self, handler: CommandHadler, pipes: List[PipeLine]):
+        def chain_factory(ctx: PipelineContext):
+            async def service_handler():
+                if ctx.cancelled:
                     return None
-                return service.handler(command)
+                return await handler.handler(ctx.command)
 
             next_handler = service_handler
 
-            for pipeline in reversed(pipelines):
-
+            for pipeline in reversed(pipes):
                 def create_pipeline_handler(pipe, next_h):
-                    def pipeline_handler():
-                        if pipeline_context.cancelled:
+                    async def pipeline_handler():
+                        if ctx.cancelled:
                             return None
-                        return pipe.handler(pipeline_context, next_h)
-
+                        return await pipe.handler(ctx, next_h)
                     return pipeline_handler
 
                 next_handler = create_pipeline_handler(pipeline, next_handler)
 
             return next_handler
+        return chain_factory
+    
+    def dispose(self):
+        self._handler_cache.clear()
+        self._commands_handlers.clear()
+        self._pipelines.clear()
 
-        chain = create_chain()
-        result = chain()
-        return result
+component(List[PipeLine], provider_type=ProviderType.LIST)
+component(List[CommandHadler], provider_type=ProviderType.LIST)
+component(Context,provider_type=ProviderType.OBJECT,value=context)

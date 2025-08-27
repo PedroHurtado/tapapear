@@ -7,6 +7,7 @@ router = build_router("customers")
 class Response(Command):...
 class Request(Command):...    
 
+
 @router.put("", summary="Update Customer")
 @inject
 def controller(req:Request, config:Config=deps(Config))->Response:

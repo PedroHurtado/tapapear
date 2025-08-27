@@ -1,4 +1,3 @@
-from fastapi import APIRouter
 from common.ioc import component, deps, inject
 from common.infraestructure.repository import InjectsRepo, Add
 from common.mediator import Command
@@ -32,7 +31,7 @@ class Service:
     def __init__(self, repository: Repository, mapper:Mapper):
         self._repository = repository
         self._mapper = mapper
-
+    
     async def __call__(self, req: Request)->Response:
 
         tax_type = TaxType("", "")
