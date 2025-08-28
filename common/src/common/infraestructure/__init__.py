@@ -5,11 +5,11 @@ from .document import (
     Document,
     Embeddable
 )
-from .firestore import(    
-    transactional,
+from .firestore import(        
     DocumentNotFound,
     RepositoryFirestore,    
-    initialize_database,    TransactionPipeLine,
+    initialize_database,    
+    TransactionPipeLine,
 
 )
 from .repository import (
@@ -25,17 +25,19 @@ __all__ = [
     'id',    
     'reference',
     'Document',
-    'initialize_database',
-    'transactional',
+    'Embeddable',
+    
+    'initialize_database',    
     'DocumentNotFound',
     'RepositoryFirestore',
-    'Embeddable',
+    'TransactionPipeLine'   
+
     'Get',
     'Update',
     'Remove',
     'Add',
     'Repository',
     'InjectsRepo',
-    'invoke',
-    'TransactionPipeLine'
+    'invoke'
+    
 ]
