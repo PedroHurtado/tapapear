@@ -73,7 +73,7 @@ class CommandHanlderMeta(ABCMeta):
 
 class CommandHadler(Generic[T], metaclass=CommandHanlderMeta):
     @abstractmethod
-    def handler(self, command: T):
+    async def handler(self, command: T):
         pass
 
 
@@ -104,15 +104,15 @@ def ordered(order: int):
     return decorator
 
 
-class PipeLine(ABC):
+class CommandPipeLine(ABC):
     @abstractmethod
-    def handler(
+    async def handler(
         self, pipeline_context: PipelineContext, next_handler: Callable[[], Any]
     ) -> Any:
         pass
 
 
-def pipelines(*pipeline_classes: Type["PipeLine"]) -> Callable[[Type[T]], Type[T]]:
+def pipelines(*pipeline_classes: Type["CommandPipeLine"]) -> Callable[[Type[T]], Type[T]]:
     """
     Decorador para asignar pipelines específicos a una clase.
 
@@ -168,7 +168,7 @@ class CacheEntry:
     def __init__(
         self,
         command_handler: CommandHadler,
-        pipelines: List[PipeLine],
+        pipelines: List[CommandPipeLine],
         chain_factory: Callable[[PipelineContext], Callable[[], Awaitable]]
     ):
         self.command_handler = command_handler
@@ -181,7 +181,7 @@ class Mediator:
     def __init__(
         self,
         commands_handlers: List[CommandHadler],
-        pipelines: List[PipeLine],
+        pipelines: List[CommandPipeLine],
         context: Context
     ):
         self._commands_handlers = commands_handlers
@@ -217,14 +217,18 @@ class Mediator:
             raise ValueError(f"No se encontró instancia del handler {service_type}")
         return service
     
-    def _resolve_pipelines(self, handler: CommandHadler) -> List[PipeLine]:
+    def _resolve_pipelines(self, handler: CommandHadler) -> List[CommandPipeLine]:
         handler_class = type(handler)
         
         if hasattr(handler_class, "__pipelines__"):
             pipeline_classes = getattr(handler_class, "__pipelines__")
             if pipeline_classes:
-                pipelines = [p for p in self._pipelines if type(p) in pipeline_classes]
-                # Si hay decorador con pipelines específicos, mantener orden de declaración
+                # Mantener el orden de declaración del decorador
+                pipelines = []
+                for pipeline_class in pipeline_classes:
+                    pipeline_instance = next((p for p in self._pipelines if type(p) == pipeline_class), None)
+                    if pipeline_instance:
+                        pipelines.append(pipeline_instance)
             else:
                 pipelines = []
         else:
@@ -234,7 +238,7 @@ class Mediator:
         
         return pipelines
     
-    def _create_chain_factory(self, handler: CommandHadler, pipes: List[PipeLine]):
+    def _create_chain_factory(self, handler: CommandHadler, pipes: List[CommandPipeLine]):
         def chain_factory(ctx: PipelineContext):
             async def service_handler():
                 if ctx.cancelled:
@@ -261,6 +265,6 @@ class Mediator:
         self._commands_handlers.clear()
         self._pipelines.clear()
 
-component(List[PipeLine], provider_type=ProviderType.LIST)
+component(List[CommandPipeLine], provider_type=ProviderType.LIST)
 component(List[CommandHadler], provider_type=ProviderType.LIST)
 component(Context,provider_type=ProviderType.OBJECT,value=context)

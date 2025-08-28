@@ -29,7 +29,6 @@ class Repository:
 
 
 @component
-@pipelines(LogggerPipeLine,TransactionPipeLine)
 class Service(CommandHadler[Request]):
     def __init__(self, repository:Repository):
         self._repository = repository  
