@@ -8,8 +8,9 @@ from ._command import (
     NotificationHandler,
     NotificationPipeLine,
     CommandPipeLine,
+    PipelineContext
 )
-from ._pipelines import LogggerPipeLine, TransactionPipeLine, ordered
+from ._pipelines import LogggerPipeLine, ordered
 
 
 __all__ = [
@@ -22,8 +23,8 @@ __all__ = [
     "NotificationHandler",
     "NotificationPipeLine",
     "CommandPipeLine",
-    "LogggerPipeLine",
-    "TransactionPipeLine",
+    "LogggerPipeLine",    
     "ordered",
+    "PipelineContext"
 ]
 

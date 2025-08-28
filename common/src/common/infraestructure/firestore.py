@@ -22,8 +22,13 @@ from typing import (
     Generic,
     Dict,
     Awaitable,
+    TypeAlias,
+    get_args,
+    get_origin
 )
 from common.domain.events import DomainEvent
+from common.ioc import component, ProviderType, inject, deps
+from common.mediator import ordered, CommandPipeLine, PipelineContext
 from abc import ABC, abstractmethod
 from .document import Document, DocumentReference, MixinSerializer
 from dataclasses import fields, is_dataclass
@@ -37,42 +42,10 @@ T = TypeVar("T", bound=Document)
 R = TypeVar("R", bound=DomainEvent)
 
 
-class TransactionManager:
-    """Gestor de transacciones para Firestore - completamente transparente"""
-
-    def __init__(self, db: firestore.AsyncClient):
-        self.db = db
-
-    async def execute_in_transaction(self, func: Callable, *args, **kwargs):
-        """Ejecuta una función dentro de una transacción de forma transparente"""
-
-        async def transaction_func(transaction: AsyncTransaction):
-            # Establecer la transacción en el contexto
-            token = _current_transaction.set(transaction)
-            try:
-                # Ejecutar la función original sin modificar sus parámetros
-                if asyncio.iscoroutinefunction(func):
-                    return await func(*args, **kwargs)
-                else:
-                    return func(*args, **kwargs)
-            finally:
-                # Limpiar el contexto
-                _current_transaction.reset(token)
-
-        try:
-            logger.info("🔄 Iniciando transacción Firestore")
-            result = await self.db.run_transaction(transaction_func)
-            logger.info("✅ Transacción completada exitosamente")
-            return result
-        except Exception as e:
-            logger.error(f"❌ Error en transacción: {str(e)}")
-            logger.debug(f"Traceback completo: {traceback.format_exc()}")
-            raise
-
+AsyncTransactionContext: TypeAlias = ContextVar[Optional["AsyncTransaction"]]
 
 db: AsyncClient = None
-transaction_manager: Optional[TransactionManager] = None
-_current_transaction: ContextVar[Optional[AsyncTransaction]] = ContextVar(
+context_transaction: AsyncTransactionContext = ContextVar(
     "current_transaction", default=None
 )
 
@@ -97,75 +70,19 @@ def get_document(path: str) -> AsyncDocumentReference:
     return get_db().document(path)
 
 
-def init_firestore_transactions(db: firestore.AsyncClient):
-    """Inicializar el sistema de transacciones"""
-    global transaction_manager
-    transaction_manager = TransactionManager(db)
-
-
 def get_current_transaction() -> Optional[AsyncTransaction]:
     """Obtiene la transacción actual del contexto"""
-    return _current_transaction.get()
+    return context_transaction.get()
 
-"""def initialize_database(config: FirestoreConfig):
-    credentials_path = os.getenv(config.credentials_env)
-    if not credentials_path:
-        raise RuntimeError(f"La variable {config.credentials_env} no está definida")
-
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-    cred = Credentials.from_service_account_file(credentials_path)
-    db = AsyncClient(project=cred.project_id, credentials=cred, database=config.database)
-    init_firestore_transactions(db)
-    return db"""
 
 def initialize_database(
     credentials_path: str,
     database: str = "(default)",
 ):
-    global db     
+    global db
     credentials_path = get_path(credentials_path)
     cred = Credentials.from_service_account_file(credentials_path)
     db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
-    init_firestore_transactions(db)
-
-
-def transactional(func: Callable[P, T]) -> Callable[P, T]:
-    """
-    Decorador que ejecuta el método dentro de una transacción Firestore.
-
-    El método decorado se ejecuta normalmente, sin necesidad de manejar
-    transacciones explícitamente. Los repositories automáticamente usan
-    la transacción activa.
-
-    Usage:
-        @transactional
-        async def create_user(self, user_data: dict):
-            # Tu código normal aquí, sin try/except ni manejo de transacciones
-            await self.external_service.validate(user_data)
-            user = await self.user_repository.create(user_data)
-            await self.audit_repository.log_creation(user.id)
-            return user
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        if transaction_manager is None:
-            raise RuntimeError(
-                "Sistema de transacciones no inicializado. "
-                "Llama a init_firestore_transactions(db) en el startup de tu app"
-            )
-
-        # Si ya estamos en una transacción, ejecutar directamente
-        if get_current_transaction() is not None:
-            if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
-            else:
-                return func(*args, **kwargs)
-
-        # Ejecutar en nueva transacción
-        return await transaction_manager.execute_in_transaction(func, *args, **kwargs)
-
-    return wrapper
 
 
 def convert_document_references(data: Any) -> Any:
@@ -234,7 +151,41 @@ async def to_document(
 class RepositoryFirestore(Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
-    def __init__(self, cls: Type[T], db: Optional[AsyncClient] = None):
+    def __init_subclass__(cls, **kwargs):
+        """Captura el tipo T cuando se define una subclase"""
+        super().__init_subclass__(**kwargs)
+
+        # Buscar en todas las bases para encontrar RepositoryFirestore[ConcreteType]
+        for base in cls.__orig_bases__:
+            origin = get_origin(base)
+            if origin is RepositoryFirestore:
+                args = get_args(base)
+                if args:
+                    cls._document_type = args[0]
+                    break
+        else:
+            # Si no se encuentra, buscar en las bases de las bases (herencia múltiple)
+            for base in cls.__mro__:
+                if hasattr(base, "__orig_bases__"):
+                    for orig_base in base.__orig_bases__:
+                        origin = get_origin(orig_base)
+                        if origin is RepositoryFirestore:
+                            args = get_args(orig_base)
+                            if args:
+                                cls._document_type = args[0]
+                                return
+
+    @inject
+    def __init__(self, db: AsyncClient = deps(AsyncClient)):
+        # Validar que la clase tenga el tipo capturado
+        if not hasattr(self.__class__, "_document_type"):
+            raise ValueError(
+                f"No se pudo determinar el tipo de documento para {self.__class__.__name__}. "
+                f"Asegúrate de declarar la clase como: class {self.__class__.__name__}(RepositoryFirestore[TuTipo])"
+            )
+
+        cls = self.__class__._document_type
+
         if not issubclass(cls, Document):
             raise ValueError(
                 f"La clase {cls.__name__} debe ser una subclase de Document"
@@ -242,14 +193,17 @@ class RepositoryFirestore(Generic[T]):
 
         self._cls = cls
         self._collection_name = plural(cls.__name__.lower())
-        self._db = db or get_db()
+        self._db = db
 
     def __get_collection(self):
         return self._db.collection(self._collection_name)
 
-    async def create(self, document: T) -> None:
-
-        transaction = get_current_transaction()
+    @inject
+    async def create(
+        self,
+        document: T,
+        transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
+    ) -> None:
 
         doc_ref = self.__get_collection().document(str(document.id))
 
@@ -264,45 +218,55 @@ class RepositoryFirestore(Generic[T]):
 
     async def get(self, id: UUID, message: str = None) -> T:
 
-        doc_ref = self.__get_collection_ref().document(str(id))
+        doc_ref = self.__get_collection().document(str(id))
         error = DocumentNotFound(id, self._cls.__name__, message)
         data = await RepositoryFirestore.__get(doc_ref, error)
         return self._cls(**data)
 
     @staticmethod
-    async def __get(doc_ref: AsyncDocumentReference, error: DocumentNotFound) -> T:
+    @inject
+    async def __get(
+        doc_ref: AsyncDocumentReference,
+        error: DocumentNotFound,
+        transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
+    ) -> dict:
 
-        transaction = get_current_transaction()
         if transaction:
             doc_snapshot = await transaction.get(doc_ref)
         else:
             doc_snapshot = await doc_ref.get()
 
         if doc_snapshot.exists:
-            return {id: doc_snapshot.id, **doc_snapshot.to_dict()}
+            return {"id": doc_snapshot.id, **doc_snapshot.to_dict()}
 
         raise error
 
-    async def update(self, document: T) -> None:
+    @inject
+    async def update(
+        self,
+        document: T,
+        transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
+    ) -> None:
 
-        transaction = get_current_transaction()
-        doc_ref = self.__get_collection_ref().documen(str(document.id))
+        doc_ref = self.__get_collection().document(str(document.id))
 
         update_data = to_firestore(document)
         if transaction:
-            transaction.update(doc_ref, update_data)
+            transaction.set(doc_ref, update_data)
         else:
-            # Operación directa
-            await doc_ref.update(update_data)
+            await doc_ref.set(update_data)
 
         logger.debug(
             f"📝 Documento actualizado en {self._collection_name}: {document.id}"
         )
 
-    async def delete(self, doc: T) -> None:
+    @inject
+    async def delete(
+        self, doc: T, transaction: Optional[AsyncTransaction] = deps(AsyncTransaction)
+    ) -> None:
         """Elimina un documento"""
-        transaction = get_current_transaction()
-        doc_ref = self.__get_collection_ref().document(str(doc.id))
+
+        doc_ref = self.__get_collection().document(str(doc.id))
 
         if transaction:
             # Usar transacción
@@ -313,8 +277,13 @@ class RepositoryFirestore(Generic[T]):
 
         logger.debug(f"🗑️ Documento eliminado de {self._collection_name}: {doc.id}")
 
+    @inject
     async def find_by_field(
-        self, field: str, value: Any, limit: Optional[int] = None
+        self,
+        field: str,
+        value: Any,
+        limit: Optional[int] = None,
+        transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> list[T]:
         _value = str(value) if isinstance(value, UUID) else value
         query = self.__get_collection().where(field, "==", _value)
@@ -322,8 +291,6 @@ class RepositoryFirestore(Generic[T]):
         if limit:
             query = query.limit(limit)
 
-        transaction = get_current_transaction()
-        
         if transaction:
             docs = query.stream(transaction=transaction)
         else:
@@ -383,3 +350,38 @@ class RepositoryEventsFirestore(Generic[R]):
             self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
             async for doc in docs
         ]
+
+
+@component
+@ordered(100)
+class TransactionPipeLine(CommandPipeLine):
+    def __init__(self, db: AsyncClient, ctx_tx: AsyncTransactionContext):
+        self._db = db
+        self._cts_tx = ctx_tx
+
+    async def handler(
+        self, context: PipelineContext, next_handler: Callable[[], Any]
+    ) -> Any:
+
+        async def tx_wrapper(tx: AsyncTransaction):
+            token = self._cts_tx.set(tx)
+            try:
+                return await next_handler()
+            finally:
+                self._cts_tx.reset(token)
+
+        result = await self._db.transaction()(tx_wrapper)()
+        return result
+
+
+component(AsyncClient, provider_type=ProviderType.FACTORY, factory=get_db)
+component(
+    AsyncTransaction,
+    provider_type=ProviderType.FACTORY,
+    factory=get_current_transaction,
+)
+component(
+    AsyncTransactionContext,
+    provider_type=ProviderType.OBJECT,
+    value=context_transaction,
+)

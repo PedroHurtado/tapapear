@@ -14,12 +14,4 @@ class LogggerPipeLine(CommandPipeLine):
         return command
 
 
-@component
-@ordered(10)
-class TransactionPipeLine(CommandPipeLine):    
-    
-    async def handler(self, context: PipelineContext, next_handler: Callable[[], Any]) -> Any:
-        print("Before Transaction")
-        command = await next_handler()
-        print("After Transaction")
-        return command
+

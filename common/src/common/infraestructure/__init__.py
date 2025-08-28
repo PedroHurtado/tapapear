@@ -9,8 +9,8 @@ from .firestore import(
     transactional,
     DocumentNotFound,
     RepositoryFirestore,    
-    initialize_database,
-    get_db
+    initialize_database,    TransactionPipeLine,
+
 )
 from .repository import (
     Get,
@@ -36,5 +36,6 @@ __all__ = [
     'Add',
     'Repository',
     'InjectsRepo',
-    'invoke'
+    'invoke',
+    'TransactionPipeLine'
 ]
