@@ -2,10 +2,12 @@ from common.ioc import component, deps, inject
 from common.infraestructure.repository import InjectsRepo, Add
 from common.mediator import Command
 from common.server import build_router
+from common.mapper import Mapper
+from common.util import get_id
 from customers.domain.customer import Customer, TaxType
 from customers.infraestructure.customer import Repository as repo
-from automapper import Mapper
-from uuid import uuid4, UUID
+
+from uuid import UUID
 from datetime import datetime
 
 router = build_router("customers")
@@ -22,23 +24,23 @@ class Response(Command):
 
 @component
 class Repository(InjectsRepo, Add[Customer]):
-    def __init__(self, repo: repo, mapper:Mapper):
+    def __init__(self, repo: repo, mapper: Mapper):
         super().__init__(repo, mapper)
 
 
 @component
 class Service:
-    def __init__(self, repository: Repository, mapper:Mapper):
+    def __init__(self, repository: Repository, mapper: Mapper):
         self._repository = repository
         self._mapper = mapper
-    
-    async def __call__(self, req: Request)->Response:
+
+    async def __call__(self, req: Request) -> Response:
 
         tax_type = TaxType("", "")
         customer = Customer.create(
-            uuid4(), req.name, "", "", "", datetime.now(), 200, tax_type, "52"
+            get_id(), req.name, "", "", "", datetime.now(), 200, tax_type, "52"
         )
-        
+
         await self._repository.create_async(customer)
 
         return self._mapper.to(Response).map(customer)
