@@ -1,6 +1,19 @@
 import time
 import tracemalloc
 import contextvars
+from typing import TypeAlias, Optional
+from common.ioc import component,ProviderType
+
+from google.cloud.firestore import AsyncTransaction
+from contextvars import ContextVar
+
+AsyncTransactionContext: TypeAlias = ContextVar[Optional[AsyncTransaction]]
+
+context_transaction: AsyncTransactionContext = ContextVar(
+    "current_transaction", default=None
+)
+
+component(AsyncTransactionContext,provider_type=ProviderType.OBJECT,value=context_transaction)
 
 # --- Caso 1: Pasamanos ---
 def repo_with_param(tx):

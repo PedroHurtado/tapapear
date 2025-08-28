@@ -1,9 +1,5 @@
-import os
-import functools
 import logging
 import asyncio
-import traceback
-import uuid
 from uuid import UUID
 from contextvars import ContextVar
 from google.cloud import firestore
@@ -18,7 +14,6 @@ from typing import (
     TypeVar,
     ParamSpec,
     Optional,
-    Type,
     Generic,
     Dict,
     Awaitable,
@@ -26,12 +21,9 @@ from typing import (
     get_args,
     get_origin
 )
-from common.domain.events import DomainEvent
 from common.ioc import component, ProviderType, inject, deps
 from common.mediator import ordered, CommandPipeLine, PipelineContext
-from abc import ABC, abstractmethod
 from .document import Document, DocumentReference, MixinSerializer
-from dataclasses import fields, is_dataclass
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,10 +31,8 @@ logger = logging.getLogger(__name__)
 # Types para mejor tipado
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
-R = TypeVar("R", bound=DomainEvent)
 
-
-AsyncTransactionContext: TypeAlias = ContextVar[Optional["AsyncTransaction"]]
+AsyncTransactionContext: TypeAlias = ContextVar[Optional[AsyncTransaction]]
 
 db: AsyncClient = None
 context_transaction: AsyncTransactionContext = ContextVar(
@@ -50,8 +40,7 @@ context_transaction: AsyncTransactionContext = ContextVar(
 )
 
 
-async def my_callback(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
-    # Extraer collection e id del path
+async def resolve_document_reference(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:    
     path_parts = doc_ref.path.split("/")
     collection = path_parts[-2]
     doc_id = path_parts[-1]
@@ -221,7 +210,9 @@ class RepositoryFirestore(Generic[T]):
         doc_ref = self.__get_collection().document(str(id))
         error = DocumentNotFound(id, self._cls.__name__, message)
         data = await RepositoryFirestore.__get(doc_ref, error)
-        return self._cls(**data)
+        processed_data = await to_document(data, resolve_document_reference)
+        return self._cls(**processed_data)
+        
 
     @staticmethod
     @inject
@@ -297,57 +288,7 @@ class RepositoryFirestore(Generic[T]):
             docs = query.stream()
 
         return [
-            self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
-            async for doc in docs
-        ]
-
-
-class RepositoryEventsFirestore(Generic[R]):
-    """Repository base que maneja automáticamente las transacciones"""
-
-    def __init__(self, cls: Type[R], db: Optional[AsyncClient] = None):
-        if not issubclass(cls, DomainEvent):
-            raise ValueError(
-                f"La clase {cls.__name__} debe ser una subclase de DomainEvent"
-            )
-
-        self._cls = cls
-        self._collection_name = "outbux"
-        self._db = db or get_db()
-
-    def __get_collection(self):
-        return self._db.collection(self._collection_name)
-
-    async def create(self, document: R) -> None:
-
-        transaction = get_current_transaction()
-
-        doc_ref = self.__get_collection().document(str(document.id))
-
-        data_with_meta = to_firestore(document)
-        data_with_meta = {
-            **data_with_meta
-        }  # copia para no mutar el original si viene de otra parte
-        data_with_meta.pop("id", None)
-
-        if transaction:
-            transaction.create(doc_ref, data_with_meta)
-        else:
-            await doc_ref.create(data_with_meta)
-
-        logger.debug(f"📝 Documento creado en {self.collection_name}: {doc_ref.id}")
-
-    async def query(self, limit: int = 10) -> list[R]:
-        query = self.__get_collection().order_by("timestamp").limit(limit)
-        transaction = get_current_transaction()
-
-        if transaction:
-            docs = query.stream(transaction=transaction)
-        else:
-            docs = query.stream()
-
-        return [
-            self._cls(**to_document({"id": doc.id, **doc.to_dict()}))
+            self._cls(**await to_document({"id": doc.id, **doc.to_dict()}, resolve_document_reference))
             async for doc in docs
         ]
 
