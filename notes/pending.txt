@@ -20,6 +20,12 @@ logger
 HttpClient(X)	
 	Ver si llevo a config.yaml las configuraciones de HttpClient	
 	Control de exceptions
+
+Ver la definición de tokens unicos para ioc
+
+Lo ideal seria descubrir que es un TypeAlias y hacer algo 
+especial con eso sin perder type_hints, solo para calcular la clave
+del ioc
 		
 	
 
