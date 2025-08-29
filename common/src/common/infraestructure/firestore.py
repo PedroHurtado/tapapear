@@ -320,7 +320,7 @@ class TransactionPipeLine(CommandPipeLine):
 component(AsyncClient, provider_type=ProviderType.FACTORY, factory=get_db)
 component(
     AsyncTransaction,
-    provider_type=ProviderType.OBJECT,
+    provider_type=ProviderType.FACTORY,
     value=get_current_transaction,
 )
 component(
