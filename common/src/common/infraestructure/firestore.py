@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Awaitable,
     TypeAlias,
+    NewType,
     get_args,
     get_origin
 )
@@ -32,7 +33,11 @@ logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
 
-AsyncTransactionContext: TypeAlias = ContextVar[Optional[AsyncTransaction]]
+AsyncTransactionContext= NewType(
+    "AsyncTransactionContext",
+    ContextVar[Optional["AsyncTransaction"]],
+)
+
 
 db: AsyncClient = None
 context_transaction: AsyncTransactionContext = ContextVar(
@@ -221,15 +226,10 @@ class RepositoryFirestore(Generic[T]):
         error: DocumentNotFound,
         transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> dict:
-
-        if transaction:
-            doc_snapshot = await transaction.get(doc_ref)
-        else:
-            doc_snapshot = await doc_ref.get()
-
+           
+        doc_snapshot = await doc_ref.get(transaction=transaction)
         if doc_snapshot.exists:
             return {"id": doc_snapshot.id, **doc_snapshot.to_dict()}
-
         raise error
 
     @inject
@@ -282,10 +282,7 @@ class RepositoryFirestore(Generic[T]):
         if limit:
             query = query.limit(limit)
 
-        if transaction:
-            docs = query.stream(transaction=transaction)
-        else:
-            docs = query.stream()
+        docs = query.stream(transaction=transaction)        
 
         return [
             self._cls(**await to_document({"id": doc.id, **doc.to_dict()}, resolve_document_reference))
