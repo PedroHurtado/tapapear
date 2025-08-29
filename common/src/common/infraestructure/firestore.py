@@ -20,7 +20,7 @@ from typing import (
     TypeAlias,
     NewType,
     get_args,
-    get_origin
+    get_origin,
 )
 from common.ioc import component, ProviderType, inject, deps
 from common.mediator import ordered, CommandPipeLine, PipelineContext
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T", bound=Document)
 
-AsyncTransactionContext= NewType(
+AsyncTransactionContext = NewType(
     "AsyncTransactionContext",
     ContextVar[Optional["AsyncTransaction"]],
 )
@@ -45,7 +45,7 @@ context_transaction: AsyncTransactionContext = ContextVar(
 )
 
 
-async def resolve_document_reference(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:    
+async def resolve_document_reference(doc_ref: AsyncDocumentReference) -> Dict[str, Any]:
     path_parts = doc_ref.path.split("/")
     collection = path_parts[-2]
     doc_id = path_parts[-1]
@@ -171,7 +171,7 @@ class RepositoryFirestore(Generic[T]):
 
     @inject
     def __init__(self, db: AsyncClient = deps(AsyncClient)):
-        # Validar que la clase tenga el tipo capturado
+
         if not hasattr(self.__class__, "_document_type"):
             raise ValueError(
                 f"No se pudo determinar el tipo de documento para {self.__class__.__name__}. "
@@ -217,7 +217,6 @@ class RepositoryFirestore(Generic[T]):
         data = await RepositoryFirestore.__get(doc_ref, error)
         processed_data = await to_document(data, resolve_document_reference)
         return self._cls(**processed_data)
-        
 
     @staticmethod
     @inject
@@ -226,7 +225,7 @@ class RepositoryFirestore(Generic[T]):
         error: DocumentNotFound,
         transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> dict:
-           
+
         doc_snapshot = await doc_ref.get(transaction=transaction)
         if doc_snapshot.exists:
             return {"id": doc_snapshot.id, **doc_snapshot.to_dict()}
@@ -282,10 +281,14 @@ class RepositoryFirestore(Generic[T]):
         if limit:
             query = query.limit(limit)
 
-        docs = query.stream(transaction=transaction)        
+        docs = query.stream(transaction=transaction)
 
         return [
-            self._cls(**await to_document({"id": doc.id, **doc.to_dict()}, resolve_document_reference))
+            self._cls(
+                **await to_document(
+                    {"id": doc.id, **doc.to_dict()}, resolve_document_reference
+                )
+            )
             async for doc in docs
         ]
 
@@ -317,8 +320,8 @@ class TransactionPipeLine(CommandPipeLine):
 component(AsyncClient, provider_type=ProviderType.FACTORY, factory=get_db)
 component(
     AsyncTransaction,
-    provider_type=ProviderType.FACTORY,
-    factory=get_current_transaction,
+    provider_type=ProviderType.OBJECT,
+    value=get_current_transaction,
 )
 component(
     AsyncTransactionContext,

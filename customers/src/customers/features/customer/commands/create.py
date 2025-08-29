@@ -37,7 +37,7 @@ class Service(CommandHadler[Request]):
         tax_type = TaxType("", "")
         customer = Customer.create(
             get_id(), req.name, "", "", "", datetime.now(), 200, tax_type, "52"
-        )
+        )        
         await self._repository.create(customer)
         return self._mapper.to(Response).map(customer)
         
