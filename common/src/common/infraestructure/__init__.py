@@ -18,7 +18,7 @@ from .repository import (
     Remove,
     Add,
     Repository,
-    InjectsRepo,
+    AbstractRepository,
     invoke
 )
 __all__ = [    
@@ -37,7 +37,7 @@ __all__ = [
     'Remove',
     'Add',
     'Repository',
-    'InjectsRepo',
+    'AbstractRepository',
     'invoke'
     
 ]

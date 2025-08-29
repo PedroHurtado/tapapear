@@ -1,9 +1,12 @@
 from automapper import mapper, Mapper
 from automapper import Mapper as _Mapper, mapper
-from typing import TypeAlias
+from typing import NewType
 from common.ioc import component, ProviderType
 
-Mapper:TypeAlias = _Mapper
+Mapper = NewType(
+    "Mapper",
+    _Mapper
+)
 
 def register_class(source:any,target:any):
     mapper.add(source,target)
