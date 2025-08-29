@@ -305,6 +305,8 @@ class TransactionPipeLine(CommandPipeLine):
             token = self._cts_tx.set(tx)
             try:
                 return await next_handler()
+            except Exception as ex:
+                raise ex
             finally:
                 self._cts_tx.reset(token)
 
