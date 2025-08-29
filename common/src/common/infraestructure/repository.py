@@ -222,6 +222,7 @@ class AbstractRepository(Generic[T]):
     @inject
     def __init__(
         self,
+        repo:RepositoryProtocol,
         mapper: Mapper = deps(Mapper),
         mediator: Mediator = deps(Mediator),
     ):
