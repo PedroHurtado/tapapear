@@ -16,14 +16,17 @@ from pydantic import BaseModel, Field
 from common.openapi import FeatureModel
 from common.ioc import component, ProviderType
 from common.context import context, Context
+from common.domain.events import DomainEvent
 from abc import ABC, abstractmethod, ABCMeta
 import asyncio
 
 
-class Command(FeatureModel): ...
+class Command(FeatureModel): 
+    pass
 
 
-class Notification(BaseModel): ...
+class Notification(DomainEvent): 
+    pass
 
 
 T = TypeVar("T", bound=Command)
