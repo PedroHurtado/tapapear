@@ -32,6 +32,8 @@ logger
 
 	ver glogal handler exception y como montarlo
 
+	ver metricas y como se enlazan con el tracer
+
 HttpClient(X)	
 	Ver si llevo a config.yaml las configuraciones de HttpClient	
 	Control de exceptions
