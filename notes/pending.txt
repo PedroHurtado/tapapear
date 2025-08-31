@@ -16,6 +16,21 @@ Estudio de Roles
 caches de servidor
 
 logger
+	
+	OpenTelemetry
+
+	decorador de clases(x)
+	
+	ver httpx si se pone un nivel por encima para el modulo
+
+	ver injeccion de dependencias me decanto por
+		object y que cada uno cree su logger
+
+	ver mediator y como montarlo
+
+	ver repository y como montarlo
+
+	ver glogal handler exception y como montarlo
 
 HttpClient(X)	
 	Ver si llevo a config.yaml las configuraciones de HttpClient	

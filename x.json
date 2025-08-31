@@ -1,0 +1,10 @@
+{
+    "event": "Root endpoint called",
+    "logger": "__main__",
+    "level": "info",
+    "timestamp": "2025-08-31T15:56:38.266432Z",
+    "service": "test-service",
+    "trace_id": "af8e01c5447523ce0862507a84f21074",
+    "span_id": "fd376f6ae0b9690a",
+    "tracer_name": "opentelemetry.instrumentation.fastapi"
+}
