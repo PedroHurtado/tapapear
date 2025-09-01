@@ -20,18 +20,28 @@ def traced_class(metodos=None):
                         @functools.wraps(original)
                         async def async_wrapper(self, *args, **kwargs):
                             with tracer.start_as_current_span(f"{cls.__name__}.{name}") as span:
-                                span.set_attribute("method_name", name)
-                                span.set_attribute("method_type", "async")
-                                return await original(self, *args, **kwargs)
+                                span.set_attribute("method_name", name)                                
+                                try:
+                                    response =  await original(self, *args, **kwargs)
+                                    span.set_status(trace.StatusCode.OK)
+                                    return response
+                                except Exception as ex:                                    
+                                    span.set_status(trace.StatusCode.ERROR)                                   
+                                    raise
                         return async_wrapper
                     else:
                         # Sync wrapper
                         @functools.wraps(original)
                         def sync_wrapper(self, *args, **kwargs):
                             with tracer.start_as_current_span(f"{cls.__name__}.{name}") as span:
-                                span.set_attribute("method_name", name)
-                                span.set_attribute("method_type", "sync")
-                                return original(self, *args, **kwargs)
+                                span.set_attribute("method_name", name)                                
+                                try:
+                                    response = original(self, *args, **kwargs)
+                                    span.set_status(trace.StatusCode.OK)
+                                    return response
+                                except Exception as ex:
+                                    span.set_status(trace.StatusCode.ERROR)                                    
+                                    raise
                         return sync_wrapper
                 
                 setattr(cls, method_name, create_traced_method(original_method, method_name))

@@ -1,48 +1,172 @@
 import logging
 import structlog
+import json
+from httpx import Request, Response
+
+from datetime import datetime, timezone
+from typing import Sequence, Optional, Mapping, Any, List
+
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter, SpanExporter
+from opentelemetry.sdk.trace import TracerProvider, SpanProcessor, ReadableSpan
+from opentelemetry.sdk.trace.export import (
+    SimpleSpanProcessor,
+    BatchSpanProcessor,
+    SpanExporter,
+    SpanExportResult,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
+# -----------------------------
+# Exportador custom agrupado
+# -----------------------------
+class DevConsoleSpanExporter(SpanExporter):
+    """
+    Exportador custom para desarrollo:
+    imprime spans agrupados en un único JSON con un solo 'resource'.
+    """
+
+    def __init__(self, pretty: bool = True):
+        super().__init__()
+        self.pretty = pretty
+
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        if not spans:
+            return SpanExportResult.SUCCESS
+
+        # Tomamos el resource del primer span (todos deben compartirlo)
+        resource_attrs = dict(spans[0].resource.attributes) if spans[0].resource else {}
+
+        payload = {
+            "resource": resource_attrs,
+            "spans": [self._span_to_dict(s) for s in spans],
+        }
+
+        if self.pretty:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(payload, ensure_ascii=False))
+
+        return SpanExportResult.SUCCESS
+
+    # --- helpers de serialización ----
+    @staticmethod
+    def _ns_to_iso(nanos: int) -> str:
+        # OpenTelemetry usa epoch en nanosegundos
+        return datetime.fromtimestamp(nanos / 1e9, tz=timezone.utc).isoformat()
+
+    @staticmethod
+    def _attrs_to_dict(attrs: Optional[Mapping[str, Any]]) -> Mapping[str, Any]:
+        if not attrs:
+            return {}
+        # Convertimos posibles valores no-JSON (ej: bytes) a str
+        out = {}
+        for k, v in attrs.items():
+            if isinstance(v, (bytes, bytearray)):
+                out[k] = v.decode("utf-8", errors="replace")
+            else:
+                out[k] = v
+        return out
+
+    def _span_to_dict(self, span: ReadableSpan) -> Mapping[str, Any]:
+        ctx = span.get_span_context()
+
+        start_iso = self._ns_to_iso(span.start_time)
+        end_iso = self._ns_to_iso(span.end_time)
+        duration_ms = (span.end_time - span.start_time) / 1e6
+
+        events: List[Mapping[str, Any]] = []
+        for ev in span.events:
+            events.append(
+                {
+                    "name": ev.name,
+                    "time": self._ns_to_iso(ev.timestamp),
+                    "attributes": self._attrs_to_dict(ev.attributes),
+                }
+            )
+
+        links: List[Mapping[str, Any]] = []
+        for link in span.links:
+            links.append(
+                {
+                    "trace_id": format(link.context.trace_id, "032x"),
+                    "span_id": format(link.context.span_id, "016x"),
+                    "attributes": self._attrs_to_dict(link.attributes),
+                }
+            )
+
+        parent_id = format(span.parent.span_id, "016x") if span.parent else None
+
+        return {
+            "name": span.name,
+            "context": {
+                "trace_id": format(ctx.trace_id, "032x"),
+                "span_id": format(ctx.span_id, "016x"),
+            },
+            "parent_id": parent_id,
+            "kind": str(span.kind),
+            "start_time": start_iso,
+            "end_time": end_iso,
+            "duration_ms": duration_ms,
+            "status": str(span.status.status_code),
+            "attributes": self._attrs_to_dict(span.attributes),
+            "events": events,
+            "links": links,
+        }
 
 
+# --------------------------------------
+# Procesador que filtra spans de ruido
+# (mantiene tu lógica original)
+# --------------------------------------
 class FilteringSpanProcessor(SpanProcessor):
-    """Span processor that filters out unwanted ASGI internal spans."""
+    """
+    Procesa spans aplicando un filtro y delega en otro SpanProcessor (Batch).
+    Úsalo para eliminar spans internos ASGI/HTTP que no aportan.
+    """
 
-    def __init__(self, wrapped_processor: SpanExporter):
-        self.wrapped_processor = SimpleSpanProcessor(wrapped_processor)
+    def __init__(self, inner_processor: SpanProcessor):
+        self._inner = inner_processor
 
     def on_start(self, span, parent_context=None):
-        self.wrapped_processor.on_start(span, parent_context)
+        # Seguimos permitiendo que el processor interno reciba on_start
+        self._inner.on_start(span, parent_context)
 
     def on_end(self, span):
-        span_name = span.name
-        should_export = not (
+        # Misma lógica de filtrado que tenías
+        span_name = span.name or ""
+        noisy = (
             "http send" in span_name
             or "http receive" in span_name
             or "http.response.start" in span_name
             or "http.response.body" in span_name
             or span.attributes.get("asgi.event.type") is not None
         )
-        if should_export:
-            self.wrapped_processor.on_end(span)
+        if not noisy:
+            self._inner.on_end(span)
+        # Si es ruidoso, NO lo pasamos al inner y por tanto no se exporta
 
     def shutdown(self):
-        return self.wrapped_processor.shutdown()
+        return self._inner.shutdown()
 
-    def force_flush(self, timeout_millis=30000):
-        return self.wrapped_processor.force_flush(timeout_millis)
+    def force_flush(self, timeout_millis: int = 30000):
+        return self._inner.force_flush(timeout_millis)
 
 
+# --------------------------------------
+# (Opcional) Enriquecedor del nombre del tracer
+# --------------------------------------
 class TracerNameProcessor(SpanProcessor):
-    """Span processor that injects tracer_name attribute into each span."""
+    """Inyecta 'tracer_name' como atributo de span (opcional)."""
 
     def on_start(self, span, parent_context=None):
-        if span.instrumentation_scope and span.instrumentation_scope.name:            
-            span.set_attribute("tracer_name", str(span.instrumentation_scope.name))
+        scope = getattr(span, "instrumentation_scope", None)
+        if scope and getattr(scope, "name", None):
+            span.set_attribute("tracer_name", str(scope.name))
 
     def on_end(self, span):
         pass
@@ -54,8 +178,12 @@ class TracerNameProcessor(SpanProcessor):
         pass
 
 
+# --------------------------------------
+# structlog + correlación con trazas
+# --------------------------------------
 def add_service_name(service_name: str, service_version: str):
-    """Create a processor to add service info to all structlog events."""
+    """Processor de structlog para añadir servicio + correlación OTel."""
+
     def processor(logger, method_name, event_dict):
         event_dict["service_name"] = service_name
         event_dict["service_version"] = service_version
@@ -66,13 +194,17 @@ def add_service_name(service_name: str, service_version: str):
             event_dict["trace_id"] = format(ctx.trace_id, "032x")
             event_dict["span_id"] = format(ctx.span_id, "016x")
             event_dict["span_name"] = span.name
-            event_dict["tracer_name"] = span.instrumentation_scope.name
         return event_dict
+
     return processor
 
 
 def configure_structlog(service_name: str, service_version: str):
-    """Configure structlog with OpenTelemetry integration."""
+    # Suprimir logs de uvicorn/fastapi para evitar exceptions en consola
+    logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("fastapi").setLevel(logging.WARNING)
+    
     logging.basicConfig(
         format="%(message)s",
         level=logging.INFO,
@@ -94,39 +226,132 @@ def configure_structlog(service_name: str, service_version: str):
     )
 
 
-def setup_telemetry(service_name: str, service_version: str = "1.0.0", fastapi_app=None):
-    """Setup OpenTelemetry configuration."""
-    resource = Resource.create({
-        "service.name": service_name,
-        "service.version": service_version,
-    })
+def custom_response_hook(span: trace.Span, scope: dict[str, Any], message: dict[str, Any]):    
+    if not span.is_recording():
+        return    
+    if message.get('type') == 'http.response.start':
+        status_code = message.get('status')
+        
+        if status_code is not None:
+            status_int = int(status_code)
+            
+            # Buscar el span padre (el root que NO será filtrado)
+            current_span = trace.get_current_span()
+            if current_span and current_span.is_recording():
+                if 400 <= status_int < 500:
+                    current_span.set_status(Status(StatusCode.ERROR, f"HTTP {status_int}"))
+                else:
+                    current_span.set_status(Status(StatusCode.OK))
+            
+            # También modificar el span actual por si acaso
+            if 400 <= status_int < 500:
+                span.set_status(Status(StatusCode.ERROR, f"HTTP {status_int}"))
+            else:
+                span.set_status(Status(StatusCode.OK))
+
+
+# Hook mejorado para HTTPX que captura excepciones
+async def async_response_hook(span: trace.Span, request: Request, response: Response):
+    """Hook que captura respuestas HTTPX y ajusta el status del span"""
+    if span.is_recording():
+        if 400 <= response.status_code < 600:
+            span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status_code}"))
+        else:
+            span.set_status(Status(StatusCode.OK))
+
+
+async def async_request_hook(span: trace.Span, request: Request):
+    """Hook que captura requests HTTPX para agregar información adicional"""
+    if span.is_recording():
+        span.set_attribute("http.request.url", str(request.url))
+        span.set_attribute("http.request.method", request.method)
+
+
+# --------------------------------------
+# Setup OTel (manteniendo tu API)
+# --------------------------------------
+def setup_telemetry(
+    service_name: str, service_version: str = "1.0.0", fastapi_app=None
+):
+    """
+    Configura OpenTelemetry con:
+    - Resource del servicio
+    - BatchSpanProcessor + FilteringSpanProcessor
+    - Exportador DevConsole agrupado
+    - Instrumentación FastAPI, httpx y logging
+    """
+    resource = Resource.create(
+        {
+            "service.name": service_name,
+            "service.version": service_version,
+        }
+    )
 
     provider = TracerProvider(resource=resource)
-    provider.add_span_processor(TracerNameProcessor())
-    provider.add_span_processor(
-        FilteringSpanProcessor(ConsoleSpanExporter())
-    )
+
+    console_exporter = ConsoleSpanExporter()
+
+    # Procesador simple (sin batching) - salida inmediata
+    simple_processor = SimpleSpanProcessor(console_exporter)
+
+    # Aplicar tu filtro al procesador simple
+    provider.add_span_processor(FilteringSpanProcessor(simple_processor))
+
     trace.set_tracer_provider(provider)
 
+    # Instrumentación FastAPI
     if fastapi_app:
-        FastAPIInstrumentor.instrument_app(fastapi_app)
+        FastAPIInstrumentor.instrument_app(
+            fastapi_app,            
+            excluded_urls="/docs.*,/redoc,/openapi.json" 
+        )
     else:
         FastAPIInstrumentor().instrument()
 
-    HTTPXClientInstrumentor().instrument()
+    # Instrumentación HTTPX con hooks mejorados
+    HTTPXClientInstrumentor().instrument(
+        request_hook=async_request_hook,
+        response_hook=async_response_hook
+    )
+    
     LoggingInstrumentor().instrument()
 
+    # structlog con logging suprimido
     configure_structlog(service_name, service_version)
 
+    # Mensaje de arranque
     logger = structlog.get_logger(__name__)
     logger.info("Telemetry initialized", service=service_name, version=service_version)
 
 
+# --------------------------------------
+# Helpers públicos
+# --------------------------------------
 def get_tracer(name: str):
-    """Get a tracer for creating custom spans."""
     return trace.get_tracer(name)
 
 
 def get_logger(name: str = None):
-    """Get a structured logger."""
     return structlog.get_logger(name)
+
+
+# Decorador para trazar clases (debe estar definido si no existe)
+def traced_class(methods_to_trace):
+    """Decorador para trazar métodos específicos de una clase"""
+    def decorator(cls):
+        tracer = get_tracer(cls.__name__)
+        
+        for method_name in methods_to_trace:
+            if hasattr(cls, method_name):
+                original_method = getattr(cls, method_name)
+                
+                def make_traced_method(method_name, original_method):
+                    def traced_method(self, *args, **kwargs):
+                        with tracer.start_as_current_span(f"{cls.__name__}.{method_name}"):
+                            return original_method(self, *args, **kwargs)
+                    return traced_method
+                
+                setattr(cls, method_name, make_traced_method(method_name, original_method))
+        
+        return cls
+    return decorator
