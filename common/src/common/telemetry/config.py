@@ -1,7 +1,7 @@
 import logging
 import structlog
 import json
-from httpx import Request, Response
+
 
 from datetime import datetime, timezone
 from typing import Sequence, Optional, Mapping, Any, List
@@ -16,7 +16,7 @@ from opentelemetry.sdk.trace.export import (
 )
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor,ResponseInfo
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
@@ -202,8 +202,8 @@ def add_service_name(service_name: str, service_version: str):
 def configure_structlog(service_name: str, service_version: str):
     # Suprimir logs de uvicorn/fastapi para evitar exceptions en consola
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("fastapi").setLevel(logging.WARNING)
+    #logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    #logging.getLogger("fastapi").setLevel(logging.WARNING)
     
     logging.basicConfig(
         format="%(message)s",
@@ -250,21 +250,13 @@ def custom_response_hook(span: trace.Span, scope: dict[str, Any], message: dict[
                 span.set_status(Status(StatusCode.OK))
 
 
-# Hook mejorado para HTTPX que captura excepciones
-async def async_response_hook(span: trace.Span, request: Request, response: Response):
-    """Hook que captura respuestas HTTPX y ajusta el status del span"""
-    if span.is_recording():
-        if 400 <= response.status_code < 600:
-            span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status_code}"))
-        else:
-            span.set_status(Status(StatusCode.OK))
 
+async def async_response_hook(span: trace.Span, request, response: ResponseInfo):
+    if span.is_recording() and response.status_code <400:        
+        span.set_status(Status(StatusCode.OK))
+        
+    
 
-async def async_request_hook(span: trace.Span, request: Request):
-    """Hook que captura requests HTTPX para agregar información adicional"""
-    if span.is_recording():
-        span.set_attribute("http.request.url", str(request.url))
-        span.set_attribute("http.request.method", request.method)
 
 
 # --------------------------------------
@@ -310,8 +302,7 @@ def setup_telemetry(
 
     # Instrumentación HTTPX con hooks mejorados
     HTTPXClientInstrumentor().instrument(
-        request_hook=async_request_hook,
-        response_hook=async_response_hook
+        async_response_hook=async_response_hook
     )
     
     LoggingInstrumentor().instrument()

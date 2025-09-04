@@ -1,5 +1,4 @@
 import httpx
-import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -7,6 +6,10 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from common.telemetry import traced_class, get_logger, get_tracer, setup_telemetry
+
+
+logger = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 
 @traced_class(["procesar", "calcular"])
@@ -32,8 +35,6 @@ app.exception_handlers.clear()
 setup_telemetry(service_name="test-service", service_version="1.0.0", fastapi_app=app)
 
 # Get logger and tracer
-logger = get_logger(__name__)
-tracer = get_tracer(__name__)
 
 
 class TestRequest(BaseModel):
@@ -48,23 +49,8 @@ class TestResponse(BaseModel):
     status: str
 
 
-# Exception handler que NO propaga a consola
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    # Log controlado vía structlog (aparecerá en traza)
-    logger.error(
-        "Unhandled exception",
-        error=str(exc),
-        error_type=type(exc).__name__,
-        path=str(request.url),
-    )
-
-    # Marcar el span actual como error
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.set_status(Status(StatusCode.ERROR, str(exc)))
-        span.set_attribute("error.type", type(exc).__name__)
-        span.set_attribute("error.message", str(exc))
 
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
@@ -76,14 +62,8 @@ async def opentelemetry_status_middleware(request: Request, call_next):
 
     # Obtener el span actual (que será el root)
     span = trace.get_current_span()
-    if span and span.is_recording():
-        if 400 <= response.status_code < 500:
-            span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status_code}"))
-        else:
-            span.set_status(Status(StatusCode.OK))
-
-        # También puedes agregar atributos
-        span.set_attribute("http.response.status_code", response.status_code)
+    if span and span.is_recording() and response.status_code < 400:
+        span.set_status(Status(StatusCode.OK))
 
     return response
 
@@ -125,65 +105,21 @@ async def simulate_external_call():
     Función que simula llamada externa y maneja errores correctamente
     para que aparezcan en la traza de HTTPX sin llegar a consola
     """
-    current_span = trace.get_current_span()
 
     try:
+        url = "https://my-json-server.typicode.com/typicode/demo/posts/1"
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://my-json-server.typicode.com/typicode/demo/posts/125"
-            )
+            response = await client.get(url)
             response.raise_for_status()
             return response.json()
 
     except httpx.HTTPStatusError as e:
-        # Error HTTP - se captura en el span de HTTPX automáticamente
-        logger.error(
-            "HTTP error in external call",
-            status_code=e.response.status_code,
-            url=str(e.request.url),
-        )
-
-        if current_span and current_span.is_recording():
-            current_span.add_event(
-                "external_call_failed",
-                {
-                    "error.type": "HTTPStatusError",
-                    "http.status_code": e.response.status_code,
-                    "http.url": str(e.request.url),
-                },
-            )
-
-        # Lanzar excepción genérica que será capturada por el exception handler
         raise Exception(f"External API returned {e.response.status_code}")
 
     except httpx.RequestError as e:
-        # Error de conexión/red
-        logger.error(
-            "Request error in external call",
-            error=str(e),
-            url=str(e.request.url) if hasattr(e, "request") else "unknown",
-        )
-
-        if current_span and current_span.is_recording():
-            current_span.add_event(
-                "external_call_failed",
-                {"error.type": "RequestError", "error.message": str(e)},
-            )
-
-        # Lanzar excepción genérica
         raise Exception("External service unavailable")
 
     except Exception as e:
-        # Cualquier otro error
-        logger.error("Unexpected error in external call", error=str(e))
-
-        if current_span and current_span.is_recording():
-            current_span.add_event(
-                "external_call_failed",
-                {"error.type": type(e).__name__, "error.message": str(e)},
-            )
-
-        # Re-lanzar la excepción original o una nueva
         raise Exception("External call failed")
 
 
@@ -201,5 +137,5 @@ if __name__ == "__main__":
     import uvicorn
 
     logger.info("Starting test application")
-    # Disable uvicorn's default logging to see our structured logs
-    uvicorn.run(app, port=8080, log_config=None, access_log=False)
+
+    uvicorn.run(app, log_config=None, port=8080, access_log=False)
