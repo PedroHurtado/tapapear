@@ -12,6 +12,8 @@ class DomainEvent(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: get_now())
     processed: bool = False
     event_type: str
+    aggregate:str
+    aggregate_id:UUID
     data: Optional[BaseModel | Dict]
 
     @model_serializer(mode="wrap")
