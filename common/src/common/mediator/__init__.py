@@ -1,4 +1,4 @@
-from ._command import (
+from ._mediator import (
     Command,
     CommandHadler,
     Mediator,

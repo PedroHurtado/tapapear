@@ -1,5 +1,5 @@
 from common.ioc import component
-from ._command import CommandPipeLine, PipelineContext, ordered
+from ._mediator import CommandPipeLine, PipelineContext, ordered
 from typing import Callable, Any
 
 
