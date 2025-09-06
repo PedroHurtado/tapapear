@@ -2,12 +2,12 @@ from opentelemetry import trace
 import functools
 import asyncio
 
-def traced_class(metodos=None):
+def traced_class(methods=None):
     """Decorador para instrumentar una clase completa (sync y async)"""
     def decorator(cls):
         tracer = trace.get_tracer(__name__)
         
-        target_methods = metodos or [name for name in dir(cls) 
+        target_methods = methods or [name for name in dir(cls) 
                                    if not name.startswith('_') and callable(getattr(cls, name))]
         
         for method_name in target_methods:

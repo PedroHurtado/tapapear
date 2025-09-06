@@ -1,7 +1,8 @@
-__all__ = [
-    'events'
-    "BaseEntity"
-    "ValueObject"  
+__all__ = [    
+    "BaseEntity",
+    "ValueObject",  
+    "DomainEvent",
+    "DomainEventContainer"
 ]
 
 from .baseentity import(
@@ -10,4 +11,4 @@ from .baseentity import(
 from .valueobject import(
     ValueObject
 )
-from . import events 
+from .events import DomainEvent, DomainEventContainer

@@ -1,21 +1,34 @@
 from datetime import datetime, timezone
 from typing import List, Any, Dict, Optional
 from common.util import get_id, get_now
-from pydantic import BaseModel, model_serializer, SerializerFunctionWrapHandler, Field
+from pydantic import(
+     BaseModel, model_serializer, model_validator, SerializerFunctionWrapHandler, Field, ConfigDict
+)
+
 from uuid import UUID
 
 
 class DomainEvent(BaseModel):
     """Clase base para todos los eventos de dominio"""
 
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    
+
     id: UUID = Field(default_factory=lambda: get_id())
     timestamp: datetime = Field(default_factory=lambda: get_now())
     processed: bool = False
-    event_type: str
+    event_type: str = ""
     aggregate:str
     aggregate_id:UUID
-    data: Optional[BaseModel | Dict]
-
+    data: Optional[BaseModel | Dict] = None
+    
+    @model_validator(mode='before')
+    @classmethod  
+    def __set_event_type(cls, values):
+        if isinstance(values, dict):
+            values['event_type'] = cls.__name__
+        return values
+    
     @model_serializer(mode="wrap")
     def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
         data = serializer(self)
@@ -36,14 +49,10 @@ class DomainEventContainer:
 
     def remove_event(self, event: DomainEvent) -> bool:
         """
-        Remueve un evento específico de la lista
-        Returns: True si se removió, False si no se encontró
+        Remueve un evento específico de la lista si se encuentra       
         """
-        try:
+        if event in self._domain_events:
             self._domain_events.remove(event)
-            return True
-        except ValueError:
-            return False
 
     def get_events(self) -> List[DomainEvent]:
         """Obtiene una copia de la lista de eventos"""

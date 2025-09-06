@@ -326,23 +326,3 @@ def get_logger(name: str = None):
     return structlog.get_logger(name)
 
 
-# Decorador para trazar clases (debe estar definido si no existe)
-def traced_class(methods_to_trace):
-    """Decorador para trazar métodos específicos de una clase"""
-    def decorator(cls):
-        tracer = get_tracer(cls.__name__)
-        
-        for method_name in methods_to_trace:
-            if hasattr(cls, method_name):
-                original_method = getattr(cls, method_name)
-                
-                def make_traced_method(method_name, original_method):
-                    def traced_method(self, *args, **kwargs):
-                        with tracer.start_as_current_span(f"{cls.__name__}.{method_name}"):
-                            return original_method(self, *args, **kwargs)
-                    return traced_method
-                
-                setattr(cls, method_name, make_traced_method(method_name, original_method))
-        
-        return cls
-    return decorator
