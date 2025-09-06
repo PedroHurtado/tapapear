@@ -19,6 +19,8 @@ from common.context import context, Context
 from common.domain.events import DomainEvent
 from abc import ABC, abstractmethod, ABCMeta
 import asyncio
+import uuid
+from opentelemetry import trace
 
 
 class Command(FeatureModel): 
@@ -258,6 +260,9 @@ class Mediator:
         self._context = context
         self._handler_cache: Dict[Type[Command], CacheEntry] = {}
         self._notification_cache: Dict[Type[Notification], NotificationCacheEntry] = {}
+        
+        # Inicializar tracer
+        self._tracer = trace.get_tracer(__name__)
 
     async def notify(self, notification: Notification) -> None:
         notification_type = type(notification)
@@ -279,14 +284,50 @@ class Mediator:
 
     async def send(self, command: Command):
         command_type = type(command)
+        command_id = getattr(command, 'id', str(uuid.uuid4()))
+        
+        # Crear span principal del mediator
+        with self._tracer.start_as_current_span("mediator.send") as span:
+            try:
+                # Atributos básicos del comando
+                span.set_attributes({
+                    "mediator.operation": "send",
+                    "mediator.command.type": command_type.__name__,
+                    "mediator.command.id": str(command_id),
+                })
 
-        if command_type not in self._handler_cache:
-            self._build_cache_entry(command_type)
+                # Verificar si necesitamos construir cache
+                cache_hit = command_type in self._handler_cache
+                span.set_attribute("mediator.cache.hit", cache_hit)
 
-        cache_entry = self._handler_cache[command_type]
-        pipeline_context = PipelineContext(command)
-        chain = cache_entry.chain_factory(pipeline_context)
-        return await chain()
+                if not cache_hit:
+                    with self._tracer.start_as_current_span("mediator.cache_build") as cache_span:
+                        cache_span.set_attributes({
+                            "cache.command.type": command_type.__name__,
+                            "cache.operation": "build_entry"
+                        })
+                        self._build_cache_entry(command_type)
+
+                cache_entry = self._handler_cache[command_type]
+                
+                # Añadir información sobre pipelines y handler
+                span.set_attributes({
+                    "mediator.pipeline.count": len(cache_entry.pipelines),
+                    "mediator.handler.type": type(cache_entry.command_handler).__name__
+                })
+
+                pipeline_context = PipelineContext(command)
+                chain = cache_entry.chain_factory(pipeline_context)
+                return await chain()
+
+            except Exception as e:
+                span.record_exception(e)
+                span.set_attributes({
+                    "error.type": type(e).__name__,
+                    "error.message": str(e),
+                    "error.occurred_in": "mediator"
+                })
+                raise
 
     def _build_cache_entry(self, command_type: Type[Command]):
         service_type = self._context.commands.get(command_type, None)
@@ -391,19 +432,82 @@ class Mediator:
             async def service_handler():
                 if ctx.cancelled:
                     return None
-                return await handler.handler(ctx.message)
+                
+                # Crear span para el handler
+                with self._tracer.start_as_current_span("handler.execute") as handler_span:
+                    try:
+                        handler_span.set_attributes({
+                            "handler.type": type(handler).__name__,
+                            "handler.command.type": type(ctx.message).__name__,
+                            "handler.context.cancelled": ctx.cancelled,
+                            "context.data.count": len(ctx.data),
+                            "context.message.type": type(ctx.message).__name__
+                        })
+                        
+                        result = await handler.handler(ctx.message)
+                        
+                        handler_span.set_attribute("handler.result.present", result is not None)
+                        return result
+                        
+                    except Exception as e:
+                        handler_span.record_exception(e)
+                        handler_span.set_attributes({
+                            "error.type": type(e).__name__,
+                            "error.message": str(e),
+                            "error.occurred_in": "handler"
+                        })
+                        raise
 
             next_handler = service_handler
 
-            for pipeline in reversed(pipes):
-                def create_pipeline_handler(pipe, next_h):
+            # Crear handlers de pipeline con instrumentación simple
+            for position, pipeline in enumerate(reversed(pipes), 1):
+                def create_pipeline_handler(pipe, next_h, pos):
                     async def pipeline_handler():
                         if ctx.cancelled:
                             return None
-                        return await pipe.handler(ctx, next_h)
+                        
+                        # Crear span para cada pipeline
+                        with self._tracer.start_as_current_span("pipeline.execute") as pipeline_span:
+                            try:
+                                pipeline_span.set_attributes({
+                                    "pipeline.name": type(pipe).__name__,
+                                    "pipeline.order": getattr(type(pipe), 'order', 0),
+                                    "pipeline.position": len(pipes) - pos + 1,
+                                    "pipeline.context.cancelled": ctx.cancelled,
+                                    "context.data.count": len(ctx.data),
+                                    "context.cancelled": ctx.cancelled,
+                                    "context.message.type": type(ctx.message).__name__
+                                })
+                                
+                                # Capturar claves antes de la ejecución
+                                keys_before = set(ctx.data.keys())
+                                
+                                result = await pipe.handler(ctx, next_h)
+                                
+                                # Capturar claves añadidas por este pipeline
+                                keys_after = set(ctx.data.keys())
+                                new_keys = keys_after - keys_before
+                                if new_keys:
+                                    pipeline_span.set_attribute("pipeline.context.data_keys", list(new_keys))
+                                
+                                pipeline_span.set_status(trace.Status(trace.StatusCode.OK))
+                                return result
+                                
+                            except Exception as e:
+                                pipeline_span.record_exception(e)
+                                pipeline_span.set_attributes({
+                                    "error.type": type(e).__name__,
+                                    "error.message": str(e),
+                                    "error.occurred_in": "pipeline",
+                                    "error.pipeline.name": type(pipe).__name__
+                                })
+                                pipeline_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                                raise
+                    
                     return pipeline_handler
 
-                next_handler = create_pipeline_handler(pipeline, next_handler)
+                next_handler = create_pipeline_handler(pipeline, next_handler, position)
 
             return next_handler
         return chain_factory

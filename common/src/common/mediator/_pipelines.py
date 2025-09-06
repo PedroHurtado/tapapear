@@ -7,11 +7,9 @@ from typing import Callable, Any
 @ordered(5)
 class LogggerPipeLine(CommandPipeLine):
     
-    async def handler(self, context: PipelineContext, next_handler: Callable[[], Any]) -> Any:
-        print("Before Logger")
-        command = await next_handler()
-        print("After Logger")
-        return command
+    async def handler(self, context: PipelineContext, next_handler: Callable[[], Any]) -> Any:       
+        return await next_handler()       
+        
 
 
 
