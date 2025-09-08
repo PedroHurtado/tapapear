@@ -2,22 +2,21 @@ from common.ioc import component, deps, inject
 from common.infraestructure.repository import AbstractRepository, Add
 from common.server import build_router
 from common.mapper import Mapper
-from common.util import get_id,get_now
+from common.util import get_id,get_now,ID
 from common.openapi import FeatureModel
 from common.mediator import Mediator, Command, CommandHadler
 from customers.domain.customer import Customer, TaxType
 from customers.infraestructure.customer import Repository as RepositoryCustomer
-from uuid import UUID
+
 
 router = build_router("customers")
-
 
 class Request(Command):
     name: str
 
 
 class Response(FeatureModel):
-    id: UUID
+    id: ID
     name: str
 
 
