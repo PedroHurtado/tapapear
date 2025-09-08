@@ -14,6 +14,5 @@ __all__ = [
     "principal_ctx",
     "allow_anonymous"
     "authorize",
-    "setup_security_dependencies"
-    ""
+    "setup_security_dependencies"    
 ]
