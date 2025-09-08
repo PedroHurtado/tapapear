@@ -13,7 +13,7 @@ from typing import (
 
 from common.mapper import Mapper
 from common.ioc import inject, deps, container
-from common.mediator import Mediator
+from common.mediator import EventBus
 
 T = TypeVar("T")
 
@@ -135,7 +135,7 @@ class RepoMeta(type):
             if events:
                 # If notification fails, the exception will propagate.
                 for event in events:
-                    await instance._mediator.notify(event)
+                    await instance._event_bus.notify(event)
 
     @staticmethod
     def _clear_domain_events(entity):
@@ -246,16 +246,16 @@ class AbstractRepository(Generic[T]):
     def __init__(
         self,
         mapper: Mapper = deps(Mapper),
-        mediator: Mediator = deps(Mediator),
+        event_bus: EventBus = deps(EventBus),
     ):
         if not isinstance(mapper, Mapper):
             raise TypeError(f"{mapper!r} is not a Mapper")
 
-        if not isinstance(mediator, Mediator):
-            raise TypeError(f"{mediator!r} is not a Mediator")
+        if not isinstance(event_bus, EventBus):
+            raise TypeError(f"{event_bus} is not a EventBus")
 
         self._mapper = mapper
-        self._mediator = mediator
+        self._event_bus = event_bus
 
     @property
     def _repo(self):
