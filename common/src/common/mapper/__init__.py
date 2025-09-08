@@ -1,5 +1,5 @@
-from .mapper import register_class, Mapper
+from .mapper import mapper_class, Mapper
 __all__=[
     "Mapper",    
-    "register_class"
+    "mapper_class"
 ]

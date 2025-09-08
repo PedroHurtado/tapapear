@@ -8,7 +8,7 @@ Mapper = NewType(
     _Mapper
 )
 
-def register_class(source:any,target:any):
+def mapper_class(source:any,target:any):
     mapper.add(source,target)
     mapper.add(target,source)
 
