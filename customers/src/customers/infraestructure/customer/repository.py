@@ -11,5 +11,5 @@ class Customer(Document):
 mapper_class(CustomerDomain,Customer)
 
 @component
-class Repository(RepositoryFirestore[Customer]):...
+class RepositoryCustomer(RepositoryFirestore[Customer]):...
  

@@ -201,9 +201,10 @@ def add_service_name(service_name: str, service_version: str):
 
 def configure_structlog(service_name: str, service_version: str):
     # Suprimir logs de uvicorn/fastapi para evitar exceptions en consola
+    
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
-    #logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    #logging.getLogger("fastapi").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("fastapi").setLevel(logging.WARNING)
     
     logging.basicConfig(
         format="%(message)s",

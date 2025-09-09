@@ -78,6 +78,7 @@ class Customer(BaseEntity):
         self._addres = address
         self._tax_type = tax_type
         self._tax_numbrer = tax_number
+        raise ConflictDomainException("El dni está duplicado")
 
     def activate(self):
         self._status = ClientStatus.ACTIVE

@@ -11,7 +11,7 @@ router = build_router("customers")
 class Request(Command):...    
 
 
-@router.put("", summary="Update Customer", status_code=204, responses=build_error_responses(400,409))
+@router.put("", summary="Update Customer", status_code=204, responses=build_error_responses(409))
 @inject
 def controller(req:Request, config:Config=deps(Config)):
     return empty()

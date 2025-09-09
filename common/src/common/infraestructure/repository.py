@@ -11,11 +11,18 @@ from typing import (
     get_args,
 )
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.semconv.trace import SpanAttributes
+
 from common.mapper import Mapper
 from common.ioc import inject, deps, container
 from common.mediator import EventBus
 
 T = TypeVar("T")
+
+# OpenTelemetry tracer instance
+tracer = trace.get_tracer(__name__)
 
 
 class Delegate(Generic[T]):
@@ -103,39 +110,255 @@ class RepoMeta(type):
         """Create the asynchronous wrapper method for the delegate."""
 
         async def async_method(self, *args, **kwargs):
-            target = RepoMeta._get_target_method(self, protected_name)
+            # Create root span for the repository operation
+            with tracer.start_as_current_span(
+                f"repository.{protected_name}",
+                kind=trace.SpanKind.INTERNAL
+            ) as span:
+                try:
+                    # Set initial span attributes
+                    RepoMeta._set_initial_span_attributes(
+                        span, self, protected_name, args, needs_input_map, needs_output_map, needs_domain_events
+                    )
 
-            # Validate and apply input mapping for operations that require it.
-            args, kwargs = RepoMeta._apply_input_mapping(self, args, kwargs, needs_input_map)
+                    target = RepoMeta._get_target_method(self, protected_name)
 
-            # Execute repository method (infrastructure concrete)
-            result = await target(*args, **kwargs)
+                    # Apply input mapping with tracing
+                    args, kwargs = await RepoMeta._apply_input_mapping_with_trace(
+                        self, args, kwargs, needs_input_map, span
+                    )
 
-            # After successful persist, notify domain events if required.
-            if needs_domain_events and args:
-                await RepoMeta._handle_domain_events_after(self, args[0])
-                RepoMeta._clear_domain_events(args[0])
+                    # Execute repository method with tracing
+                    result = await RepoMeta._execute_concrete_repo_with_trace(
+                        target, args, kwargs, span, self, protected_name
+                    )
 
-            # Apply output mapping
-            if needs_output_map and result is not None:
-                if isinstance(result, list):
-                    result = [self._mapper.map(item) for item in result]
-                else:
-                    result = self._mapper.map(result)
+                    # Handle domain events with tracing
+                    if needs_domain_events and args:
+                        await RepoMeta._handle_domain_events_with_trace(self, args[0], span)
 
-            return result
+                    # Apply output mapping with tracing
+                    if needs_output_map and result is not None:
+                        result = await RepoMeta._apply_output_mapping_with_trace(
+                            self, result, span
+                        )
+
+                    # Mark span as successful
+                    span.set_status(Status(StatusCode.OK))
+                    span.set_attribute("repository.operation.success", True)
+                    
+                    return result
+
+                except Exception as e:
+                    # Handle any error that occurs during the operation
+                    RepoMeta._handle_span_error(span, e, protected_name)
+                    raise
 
         return async_method
 
     @staticmethod
-    async def _handle_domain_events_after(instance, entity):
-        """Notify domain events after successful persistence."""
-        if hasattr(entity, "get_events") and callable(entity.get_events):
-            events = entity.get_events()
-            if events:
-                # If notification fails, the exception will propagate.
-                for event in events:
-                    await instance._event_bus.notify(event)
+    def _set_initial_span_attributes(span, instance, protected_name, args, needs_input_map, needs_output_map, needs_domain_events):
+        """Set initial attributes for the repository operation span."""
+        span.set_attribute("repository.operation", protected_name)
+        span.set_attribute("repository.class", instance.__class__.__name__)
+        span.set_attribute("repository.input_mapping_required", needs_input_map)
+        span.set_attribute("repository.output_mapping_required", needs_output_map)
+        span.set_attribute("repository.domain_events_enabled", needs_domain_events)
+        
+        # Try to get entity information from first argument
+        if args and hasattr(args[0], '__class__'):
+            span.set_attribute("repository.entity_type", args[0].__class__.__name__)
+            if hasattr(args[0], 'id') and args[0].id:
+                span.set_attribute("repository.entity_id", str(args[0].id))
+
+        # Set concrete repository type
+        if hasattr(instance, '__concrete_repo_type'):
+            span.set_attribute("repository.concrete_type", instance.__concrete_repo_type.__name__)
+
+    @staticmethod
+    async def _apply_input_mapping_with_trace(instance, args, kwargs, needs_input_map, parent_span):
+        """Apply input mapping with OpenTelemetry tracing."""
+        if not needs_input_map:
+            return args, kwargs
+
+        with tracer.start_as_current_span(
+            "repository.input_mapping",
+            kind=trace.SpanKind.INTERNAL
+        ) as span:
+            try:
+                args = list(args)
+
+                if not args:
+                    raise ValueError("expected entity as first positional argument for this operation")
+
+                # Set mapping span attributes
+                entity = args[0]
+                span.set_attribute("mapping.direction", "domain_to_document")
+                span.set_attribute("mapping.entity_type", entity.__class__.__name__)
+                span.set_attribute("mapper.class", instance._mapper.__class__.__name__)
+                
+                if hasattr(entity, 'id') and entity.id:
+                    span.set_attribute("mapping.entity_id", str(entity.id))
+
+                # Perform mapping
+                mapped_entity = instance._mapper.map(entity)
+                args[0] = mapped_entity
+
+                # Mark mapping as successful
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("mapping.success", True)
+                
+                return tuple(args), kwargs
+
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, f"Input mapping failed: {str(e)}"))
+                span.set_attribute("mapping.success", False)
+                span.set_attribute("mapping.error", str(e))
+                raise
+
+    @staticmethod
+    async def _execute_concrete_repo_with_trace(target, args, kwargs, parent_span, instance, protected_name):
+        """Execute the concrete repository method with tracing."""
+        with tracer.start_as_current_span(
+            f"repository.concrete.{protected_name}",
+            kind=trace.SpanKind.INTERNAL
+        ) as span:
+            try:
+                # Set concrete repository span attributes
+                span.set_attribute("repository.concrete.method", protected_name)
+                span.set_attribute("repository.concrete.class", instance._repo.__class__.__name__)
+                
+                # Execute the concrete repository method
+                result = await target(*args, **kwargs)
+                
+                # Mark execution as successful
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("repository.concrete.success", True)
+                
+                return result
+
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, f"Concrete repository execution failed: {str(e)}"))
+                span.set_attribute("repository.concrete.success", False)
+                span.set_attribute("repository.concrete.error", str(e))
+                raise
+
+    @staticmethod
+    async def _handle_domain_events_with_trace(instance, entity, parent_span):
+        """Handle domain events with OpenTelemetry tracing."""
+        if not (hasattr(entity, "get_events") and callable(entity.get_events)):
+            return
+
+        events = entity.get_events()
+        if not events:
+            return
+
+        with tracer.start_as_current_span(
+            "repository.domain_events",
+            kind=trace.SpanKind.INTERNAL
+        ) as span:
+            try:
+                # Set domain events span attributes
+                span.set_attribute("events.count", len(events))
+                span.set_attribute("events.entity_type", entity.__class__.__name__)
+                
+                if hasattr(entity, 'id') and entity.id:
+                    span.set_attribute("events.entity_id", str(entity.id))
+
+                event_types = [event.__class__.__name__ for event in events]
+                span.set_attribute("events.types", ",".join(event_types))
+
+                # Notify each event with individual tracing
+                for i, event in enumerate(events):
+                    await RepoMeta._notify_single_event_with_trace(
+                        instance._event_bus, event, i, span
+                    )
+
+                # Clear events after successful processing
+                RepoMeta._clear_domain_events(entity)
+                
+                # Mark events processing as successful
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("events.success", True)
+                span.set_attribute("events.cleared", True)
+
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, f"Domain events processing failed: {str(e)}"))
+                span.set_attribute("events.success", False)
+                span.set_attribute("events.error", str(e))
+                raise
+
+    @staticmethod
+    async def _notify_single_event_with_trace(event_bus, event, event_index, parent_span):
+        """Notify a single domain event with tracing."""
+        with tracer.start_as_current_span(
+            f"repository.event_notification",
+            kind=trace.SpanKind.INTERNAL
+        ) as span:
+            try:
+                # Set event notification span attributes
+                span.set_attribute("event.type", event.__class__.__name__)
+                span.set_attribute("event.index", event_index)
+                span.set_attribute("event_bus.class", event_bus.__class__.__name__)
+                
+                # Add event-specific attributes if available
+                if hasattr(event, 'entity_id'):
+                    span.set_attribute("event.entity_id", str(event.entity_id))
+                
+                # Notify the event
+                await event_bus.notify(event)
+                
+                # Mark notification as successful
+                span.set_status(Status(StatusCode.OK))
+
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, f"Event notification failed: {str(e)}"))
+                span.set_attribute("event.notification.error", str(e))
+                raise
+
+    @staticmethod
+    async def _apply_output_mapping_with_trace(instance, result, parent_span):
+        """Apply output mapping with OpenTelemetry tracing."""
+        with tracer.start_as_current_span(
+            "repository.output_mapping",
+            kind=trace.SpanKind.INTERNAL
+        ) as span:
+            try:
+                is_collection = isinstance(result, list)
+                span.set_attribute("mapping.direction", "document_to_domain")
+                span.set_attribute("mapping.is_collection", is_collection)
+                span.set_attribute("mapper.class", instance._mapper.__class__.__name__)
+                
+                if is_collection:
+                    span.set_attribute("mapping.collection_size", len(result))
+                    mapped_result = [instance._mapper.map(item) for item in result]
+                    if result:  # Set entity type from first item
+                        span.set_attribute("mapping.entity_type", result[0].__class__.__name__)
+                else:
+                    span.set_attribute("mapping.entity_type", result.__class__.__name__)
+                    mapped_result = instance._mapper.map(result)
+                    if hasattr(result, 'id') and result.id:
+                        span.set_attribute("mapping.entity_id", str(result.id))
+
+                # Mark mapping as successful
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("mapping.success", True)
+                
+                return mapped_result
+
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, f"Output mapping failed: {str(e)}"))
+                span.set_attribute("mapping.success", False)
+                span.set_attribute("mapping.error", str(e))
+                raise
+
+    @staticmethod
+    def _handle_span_error(span, exception, operation_name):
+        """Handle errors in the main repository span."""
+        span.set_status(Status(StatusCode.ERROR, f"Repository {operation_name} failed: {str(exception)}"))
+        span.set_attribute("repository.operation.success", False)
+        span.set_attribute("repository.operation.error", str(exception))
+        span.set_attribute("repository.operation.error_type", exception.__class__.__name__)
 
     @staticmethod
     def _clear_domain_events(entity):
@@ -154,23 +377,6 @@ class RepoMeta(type):
             raise AttributeError(f"'{protected_name}' is not callable on underlying repository")
 
         return target
-
-    @staticmethod
-    def _apply_input_mapping(instance, args, kwargs, needs_input_map):
-        """
-        Apply input mapping to the first positional argument (the entity) when required.
-        Raises a clear error if the operation expects an entity but none is provided.
-        """
-        if not needs_input_map:
-            return args, kwargs
-
-        args = list(args)
-
-        if not args:
-            raise ValueError("expected entity as first positional argument for this operation")
-
-        args[0] = instance._mapper.map(args[0])
-        return tuple(args), kwargs
 
 
 class Add(Generic[T], metaclass=RepoMeta):
@@ -196,6 +402,7 @@ class Remove(Generic[T], Get[T], metaclass=RepoMeta):
 class Repository(Generic[T], Add[T], Update[T], Remove[T], metaclass=RepoMeta):
     """Full repository composed of add/get/update/delete operations."""
     pass
+
 
 class AbstractRepository(Generic[T]):
     """
@@ -247,13 +454,7 @@ class AbstractRepository(Generic[T]):
         self,
         mapper: Mapper = deps(Mapper),
         event_bus: EventBus = deps(EventBus),
-    ):
-        if not isinstance(mapper, Mapper):
-            raise TypeError(f"{mapper!r} is not a Mapper")
-
-        if not isinstance(event_bus, EventBus):
-            raise TypeError(f"{event_bus} is not a EventBus")
-
+    ):     
         self._mapper = mapper
         self._event_bus = event_bus
 
@@ -262,6 +463,3 @@ class AbstractRepository(Generic[T]):
         if not hasattr(self, "_cached_repo"):
             self._cached_repo = container.get(self.__class__.__concrete_repo_type)
         return self._cached_repo
-
-
-

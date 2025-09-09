@@ -20,7 +20,9 @@ from common.domain.events import DomainEvent
 from abc import ABC, abstractmethod, ABCMeta
 import asyncio
 import uuid
+import traceback
 from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 
 
 class Command(FeatureModel):
@@ -31,7 +33,6 @@ T = TypeVar("T", bound=Command)
 N = TypeVar("N", bound=DomainEvent)
 
 
-# Excepción para commands duplicados
 class DuplicateCommandError(Exception):
     def __init__(
         self, command_type: Type[Command], existing_service: Type, new_service: Type
@@ -43,8 +44,6 @@ class DuplicateCommandError(Exception):
 
 
 class CommandHanlderMeta(ABCMeta):
-    """Metaclass que registra automáticamente los Services al definir la clase"""
-
     def __new__(mcs, name, bases, namespace, **kwargs):
         cls = super().__new__(mcs, name, bases, namespace)
 
@@ -68,20 +67,16 @@ class CommandHanlderMeta(ABCMeta):
 
     @staticmethod
     def _register_service(service_class: Type, command_type: Type[Command]):
-
         if command_type in context.commands:
             existing_service = context.commands[command_type]
             if existing_service != service_class:
                 raise DuplicateCommandError(
                     command_type, existing_service, service_class
                 )
-
         context.commands[command_type] = service_class
 
 
 class NotificationHandlerMeta(ABCMeta):
-    """Metaclass que registra automáticamente los NotificationHandlers al definir la clase"""
-
     def __new__(mcs, name, bases, namespace, **kwargs):
         cls = super().__new__(mcs, name, bases, namespace)
 
@@ -109,7 +104,6 @@ class NotificationHandlerMeta(ABCMeta):
     ):
         if domain_event_type not in context.notifications:
             context.notifications[domain_event_type] = []
-
         if handler_class not in context.notifications[domain_event_type]:
             context.notifications[domain_event_type].append(handler_class)
 
@@ -133,15 +127,12 @@ class PipelineContext:
         self.cancelled = False
 
     def cancel(self):
-        """Cancela la ejecución del pipeline"""
         self.cancelled = True
 
     def set_data(self, key: str, value: Any):
-        """Almacena datos para pipelines posteriores"""
         self.data[key] = value
 
     def get_data(self, key: str, default: Any = None):
-        """Obtiene datos almacenados por pipelines anteriores"""
         return self.data.get(key, default)
 
 
@@ -172,12 +163,8 @@ class NotificationPipeLine(ABC):
 
 
 def pipelines(
-    *pipeline_classes: Type[Union["CommandPipeLine", "NotificationPipeLine"]],
+    *pipeline_classes: Type[Union["CommandPipeLine", "NotificationPipeLine"]]
 ) -> Callable[[Type[T]], Type[T]]:
-    """
-    Decorador para asignar pipelines específicos a una clase.
-    """
-
     def decorator(cls: Type[T]) -> Type[T]:
         setattr(cls, "__pipelines__", list(pipeline_classes))
         return cls
@@ -192,8 +179,6 @@ def ignore_pipelines(cls: Type[T]) -> Type[T]: ...
 
 
 def ignore_pipelines(cls: Type[T] = None) -> Type[T] | Callable[[Type[T]], Type[T]]:
-    """Decorador para desactivar pipelines en una clase."""
-
     def apply_ignore(target_cls: Type[T]) -> Type[T]:
         setattr(target_cls, "__pipelines__", [])
         return target_cls
@@ -221,7 +206,7 @@ class NotificationCacheEntry:
         self.handlers_data = handlers_data
 
 
-# ---------------- MEDIATOR (solo send) ----------------
+# ---------------- MEDIATOR ----------------
 @component
 class Mediator:
     def __init__(
@@ -254,19 +239,27 @@ class Mediator:
                 span.set_attribute("mediator.cache.hit", cache_hit)
 
                 if not cache_hit:
-                    with self._tracer.start_as_current_span("mediator.cache_build"):
+                    with self._tracer.start_as_current_span("mediator.cache_build") as build_span:
                         self._build_cache_entry(command_type)
+                        build_span.set_status(StatusCode.OK)
 
                 cache_entry = self._handler_cache[command_type]
+                handler_name = type(cache_entry.command_handler).__name__
+                pipeline_names = [type(p).__name__ for p in cache_entry.pipelines]
+
+                span.set_attribute("mediator.command.handler", handler_name)
+                span.set_attribute("mediator.command.pipelines", ",".join(pipeline_names))
+
                 pipeline_context = PipelineContext(command)
                 chain = cache_entry.chain_factory(pipeline_context)
                 result = await chain()
 
-                span.set_status(trace.Status(trace.StatusCode.OK))
+                span.set_status(StatusCode.OK)
                 return result
             except Exception as e:
                 span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                span.set_status(StatusCode.ERROR)
+                span.set_attribute("mediator.command.error", traceback.format_exc())
                 raise
 
     def _build_cache_entry(self, command_type: Type[Command]):
@@ -277,7 +270,6 @@ class Mediator:
         service = self._find_command_handler(service_type)
         pipelines = self._resolve_command_pipelines(service)
         chain_factory = self._create_command_chain_factory(service, pipelines)
-
         self._handler_cache[command_type] = CacheEntry(
             service, pipelines, chain_factory
         )
@@ -311,20 +303,42 @@ class Mediator:
     ):
         def chain_factory(ctx: PipelineContext):
             async def service_handler():
-                with self._tracer.start_as_current_span("handler.execute"):
-                    return await handler.handler(ctx.message)
+                with self._tracer.start_as_current_span("handler.execute") as hspan:
+                    hspan.set_attribute("mediator.handler.name", type(handler).__name__)
+                    try:
+                        result = await handler.handler(ctx.message)
+                        hspan.set_status(StatusCode.OK)
+                        return result
+                    except Exception as e:
+                        hspan.record_exception(e)
+                        hspan.set_status(StatusCode.ERROR)
+                        raise
 
             next_handler = service_handler
             for position, pipeline in enumerate(reversed(pipes), 1):
+                order_index = len(pipes) - (position - 1)
 
-                def create_pipeline_handler(pipe, next_h):
+                def create_pipeline_handler(pipe, next_h, order):
                     async def pipeline_handler():
-                        with self._tracer.start_as_current_span("pipeline.execute"):
-                            return await pipe.handler(ctx, next_h)
+                        with self._tracer.start_as_current_span(
+                            "pipeline.execute"
+                        ) as pspan:
+                            pspan.set_attribute(
+                                "mediator.pipeline.name", type(pipe).__name__
+                            )
+                            pspan.set_attribute("mediator.pipeline.order", order)
+                            try:
+                                result = await pipe.handler(ctx, next_h)
+                                pspan.set_status(StatusCode.OK)
+                                return result
+                            except Exception as e:
+                                pspan.record_exception(e)
+                                pspan.set_status(StatusCode.ERROR)
+                                raise
 
                     return pipeline_handler
 
-                next_handler = create_pipeline_handler(pipeline, next_handler)
+                next_handler = create_pipeline_handler(pipeline, next_handler, order_index)
             return next_handler
 
         return chain_factory
@@ -335,7 +349,7 @@ class Mediator:
         self._commands_handlers.clear()
 
 
-# ---------------- EVENT BUS (solo notify) ----------------
+# ---------------- EVENT BUS ----------------
 @component
 class EventBus:
     def __init__(
@@ -343,7 +357,6 @@ class EventBus:
         notification_pipelines: List[NotificationPipeLine],
         context: Context,
     ):
-
         self._notification_pipelines = notification_pipelines
         self._context = context
         self._notification_cache: Dict[Type[DomainEvent], NotificationCacheEntry] = {}
@@ -376,12 +389,14 @@ class EventBus:
                 span.set_attribute("eventbus.cache.hit", cache_hit)
 
                 if not cache_hit:
-                    with self._tracer.start_as_current_span("eventbus.cache_build"):
+                    with self._tracer.start_as_current_span("eventbus.cache_build") as build_span:
                         self._build_notification_cache_entry(domain_event_type)
+                        build_span.set_status(StatusCode.OK)
 
                 cache_entry = self._notification_cache[domain_event_type]
-                handlers_count = len(cache_entry.handlers_data)
-                span.set_attribute("eventbus.handlers.count", handlers_count)
+                span.set_attribute(
+                    "eventbus.handlers.count", len(cache_entry.handlers_data)
+                )
 
                 tasks = [
                     self._execute_handler_chain(i, h_data, domain_event)
@@ -391,21 +406,30 @@ class EventBus:
                 if tasks:
                     await asyncio.gather(*tasks)
 
-                span.set_status(trace.Status(trace.StatusCode.OK))
+                span.set_status(StatusCode.OK)
             except Exception as e:
                 span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                span.set_status(StatusCode.ERROR)
+                span.set_attribute("eventbus.error", traceback.format_exc())
                 raise
 
     async def _execute_handler_chain(
         self, idx: int, h_data: Dict[str, Any], domain_event: DomainEvent
     ):
-        with self._tracer.start_as_current_span("eventbus.handler_chain"):
-            handler = h_data["handler"]
-            pipelines = h_data["pipelines"]
-            pipeline_context = PipelineContext(domain_event)
-            chain = h_data["chain_factory"](pipeline_context)
-            await chain()
+        handler = h_data["handler"]
+        ctx = PipelineContext(domain_event)
+        chain = h_data["chain_factory"](ctx)
+
+        with self._tracer.start_as_current_span("eventbus.handler_chain") as span:
+            span.set_attribute("eventbus.handler.index", idx)
+            span.set_attribute("eventbus.handler.name", type(handler).__name__)
+            try:
+                await chain()
+                span.set_status(StatusCode.OK)
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(StatusCode.ERROR)
+                raise
 
     def _build_notification_cache_entry(self, domain_event_type: Type[DomainEvent]):
         handler_types = self._context.notifications.get(domain_event_type, [])
@@ -425,7 +449,6 @@ class EventBus:
                     "chain_factory": chain_factory,
                 }
             )
-
         self._notification_cache[domain_event_type] = NotificationCacheEntry(
             handlers_data
         )
@@ -447,7 +470,9 @@ class EventBus:
         if hasattr(handler_class, "__pipelines__"):
             pipeline_classes = getattr(handler_class, "__pipelines__")
             pipelines = [
-                next((p for p in self._notification_pipelines if type(p) == pc), None)
+                next(
+                    (p for p in self._notification_pipelines if type(p) == pc), None
+                )
                 for pc in pipeline_classes
             ]
             return [p for p in pipelines if p]
@@ -461,22 +486,44 @@ class EventBus:
     ):
         def chain_factory(ctx: PipelineContext):
             async def service_handler():
-                with self._tracer.start_as_current_span("domain_event_handler.execute"):
-                    await handler.handler(ctx.message)
+                with self._tracer.start_as_current_span(
+                    "domain_event_handler.execute"
+                ) as hspan:
+                    hspan.set_attribute(
+                        "eventbus.handler.name", type(handler).__name__
+                    )
+                    try:
+                        await handler.handler(ctx.message)
+                        hspan.set_status(StatusCode.OK)
+                    except Exception as e:
+                        hspan.record_exception(e)
+                        hspan.set_status(StatusCode.ERROR)
+                        raise
 
             next_handler = service_handler
-            for pipeline in reversed(pipes):
+            for position, pipeline in enumerate(reversed(pipes), 1):
+                order_index = len(pipes) - (position - 1)
 
-                def create_pipeline_handler(pipe, next_h):
+                def create_pipeline_handler(pipe, next_h, order):
                     async def pipeline_handler():
                         with self._tracer.start_as_current_span(
                             "notification_pipeline.execute"
-                        ):
-                            await pipe.handler(ctx, next_h)
+                        ) as pspan:
+                            pspan.set_attribute(
+                                "eventbus.pipeline.name", type(pipe).__name__
+                            )
+                            pspan.set_attribute("eventbus.pipeline.order", order)
+                            try:
+                                await pipe.handler(ctx, next_h)
+                                pspan.set_status(StatusCode.OK)
+                            except Exception as e:
+                                pspan.record_exception(e)
+                                pspan.set_status(StatusCode.ERROR)
+                                raise
 
                     return pipeline_handler
 
-                next_handler = create_pipeline_handler(pipeline, next_handler)
+                next_handler = create_pipeline_handler(pipeline, next_handler, order_index)
             return next_handler
 
         return chain_factory
@@ -487,7 +534,7 @@ class EventBus:
         self._notifications_handlers.clear()
 
 
-# Providers para IoC
+# Providers
 component(List[CommandPipeLine], provider_type=ProviderType.LIST)
 component(List[CommandHadler], provider_type=ProviderType.LIST)
 component(List[NotificationPipeLine], provider_type=ProviderType.LIST)

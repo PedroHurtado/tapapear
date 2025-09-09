@@ -6,8 +6,7 @@ from common.util import get_id,get_now,ID
 from common.openapi import FeatureModel
 from common.mediator import Mediator, Command, CommandHadler
 from customers.domain.customer import Customer, TaxType
-from customers.infraestructure.customer import Repository as RepositoryCustomer
-
+from customers.infraestructure.customer import RepositoryCustomer
 
 router = build_router("customers")
 
