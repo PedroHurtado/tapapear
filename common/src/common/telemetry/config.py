@@ -205,12 +205,13 @@ def configure_structlog(service_name: str, service_version: str):
     logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("fastapi").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     
     logging.basicConfig(
         format="%(message)s",
         level=logging.INFO,
     )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    
 
     structlog.configure(
         processors=[
