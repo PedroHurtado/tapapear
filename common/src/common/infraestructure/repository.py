@@ -112,7 +112,7 @@ class RepoMeta(type):
         async def async_method(self, *args, **kwargs):
             # Create root span for the repository operation
             with tracer.start_as_current_span(
-                f"repository.{protected_name}",
+                f"infraestructure.repository.{protected_name}",
                 kind=trace.SpanKind.INTERNAL
             ) as span:
                 try:
@@ -182,7 +182,7 @@ class RepoMeta(type):
             return args, kwargs
 
         with tracer.start_as_current_span(
-            "repository.input_mapping",
+            "infraestructure.repository.input_mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -220,7 +220,7 @@ class RepoMeta(type):
     async def _execute_concrete_repo_with_trace(target, args, kwargs, parent_span, instance, protected_name):
         """Execute the concrete repository method with tracing."""
         with tracer.start_as_current_span(
-            f"repository.concrete.{protected_name}",
+            f"infraestructure.repository.concrete.{protected_name}",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -254,7 +254,7 @@ class RepoMeta(type):
             return
 
         with tracer.start_as_current_span(
-            "repository.domain_events",
+            "infraestructure.repository.domain_events",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -292,7 +292,7 @@ class RepoMeta(type):
     async def _notify_single_event_with_trace(event_bus, event, event_index, parent_span):
         """Notify a single domain event with tracing."""
         with tracer.start_as_current_span(
-            f"repository.event_notification",
+            f"infraestructure.repository.event_notification",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -320,7 +320,7 @@ class RepoMeta(type):
     async def _apply_output_mapping_with_trace(instance, result, parent_span):
         """Apply output mapping with OpenTelemetry tracing."""
         with tracer.start_as_current_span(
-            "repository.output_mapping",
+            "infraestructure.repository.output_mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:

@@ -4,13 +4,15 @@ from pydantic import BaseModel
 from common.server import build_router, EMPTY
 from common.mediator import Command
 from common.ioc import inject, deps
-from common.confg import Config
 from common.openapi import build_error_responses
 from common.http import HttpClient
+from common.ioc import component,inject,deps, ProviderType
+from common.mediator import CommandHadler, Mediator 
 
+
+router = build_router("customers")
 
 http = HttpClient("https://my-json-server.typicode.com/typicode/demo")
-
 
 class Post(BaseModel):
     id: int
@@ -23,21 +25,25 @@ class HpptPost:
     @http.post("/posts")
     async def create(body:Post)->Post:...
 
+component(HpptPost, provider_type=ProviderType.OBJECT, value=HpptPost)
 
-router = build_router("customers")
+
 
 
 class Request(Command): ...
 
+@component
+class Service(CommandHadler[Request]):
+    def __init__(self,http_post:HpptPost):
+        self._http_post = http_post
+    async def handler(self, command:Request):
+        response = await self._http_post.create(Post(id=5,title="Jose Manuel Hurtado"))
+        
 
 @router.put(
     "", summary="Update Customer", status_code=204, responses=build_error_responses(409)
 )
 @inject
-async def controller(req: Request, config: Config = deps(Config)):
-    response = await HpptPost.create(Post(id=5,title="Post Jose Manuel"))
-    print(response)
-
-    #response = await HpptPost.query()
-    #print(response)
+async def controller(req: Request, mediator:Mediator=deps(Mediator)):    
+    await mediator.send(req)
     return EMPTY

@@ -92,7 +92,7 @@ class TelemetryManager:
         """Crea el span principal del request"""
         return self.tracer.start_as_current_span(
             name=f"{method} {path_template}",
-            kind=trace.SpanKind.CLIENT,
+            record_exception=False,            
         )
 
     def create_child_span(self, name: str, parent_span=None):
@@ -102,11 +102,11 @@ class TelemetryManager:
             return self.tracer.start_as_current_span(
                 name=name,
                 context=ctx,
-                kind=trace.SpanKind.INTERNAL,
+                record_exception=False
+                
             )
         return self.tracer.start_as_current_span(
-            name=name,
-            kind=trace.SpanKind.INTERNAL,
+            name=name            
         )
 
     def set_main_span_attributes(
@@ -269,32 +269,26 @@ class TelemetryManager:
         """Finaliza un span con status OK"""
         if span and span.is_recording():
             span.set_status(Status(StatusCode.OK))
-            
 
-    # En la clase TelemetryManager
     def finish_span_error(self, span, error: Exception, record_exception: bool = True):
         """Finaliza un span con status ERROR.
-            Args:
-                span: El span a finalizar
+        
+        Args:
+            span: El span a finalizar
             error: La excepción que causó el error
-            record_exception: Si es True, registra la excepción en el span.
-                            Usar False en spans padres para evitar duplicar el stack trace.
+            record_exception: Si es True, registra los detalles completos de la excepción.
+                            Si es False, solo marca el status como ERROR sin detalles.
+        """
         """
         if span and span.is_recording():
-            # Siempre establecer el status con el mensaje de error
-            
-            
-            
-            # Solo registra la excepción si se solicita y no ha sido registrada antes
             if record_exception:
-                status_description = str(error)
-                span.set_status(Status(StatusCode.ERROR, status_description))
-            else:
-                span.set_status(Status(StatusCode.ERROR))
+                # Span donde se origina la excepción: registrar detalles completos
+                span.set_status(Status(StatusCode.ERROR, str(error)))
                 #span.record_exception(error)
-
-
-
+            else:
+                # Spans padre: solo marcar como ERROR sin detalles de la excepción
+                span.set_status(Status(StatusCode.ERROR))
+        """
 
 
 class TypeInspector:
@@ -790,12 +784,17 @@ class ArgumentValidator:
             try:
                 bound_args: Dict[str, Any] = {}
 
-                if args:
-                    param_names = list(compiled_req.param_model.model_fields.keys())
-                    for i, arg in enumerate(args[1:]):  # saltar self
+                # Obtener los nombres de parámetros del modelo en orden
+                param_names = list(compiled_req.param_model.model_fields.keys())
+
+                if args:                   
+                    start_index = 0
+                    # Mapear argumentos posicionales a nombres de parámetros
+                    for i, arg in enumerate(args[start_index:]):
                         if i < len(param_names):
                             bound_args[param_names[i]] = arg
 
+                # Combinar con argumentos nombrados (kwargs tienen precedencia)
                 bound_args.update(kwargs)
 
                 # Establecer atributos de telemetría

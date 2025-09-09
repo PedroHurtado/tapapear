@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from uuid import UUID
 from contextvars import ContextVar
 from google.cloud import firestore
@@ -137,8 +136,8 @@ async def to_document(
 
 class FirestoreTracingMixin:
     def _start_span(self, operation: str, **attributes):
-        span_name = f"firestore.{operation}.{self._collection_name}"
-        ctx_manager = tracer.start_as_current_span(span_name)
+        span_name = f"infraestructure.firestore.{operation}.{self._collection_name}"
+        ctx_manager = tracer.start_as_current_span(span_name,record_exception=True)
         span = ctx_manager.__enter__()  # activa el contexto y devuelve el span real
 
         # Guardamos el context manager para cerrarlo en _end_span
@@ -163,7 +162,8 @@ class FirestoreTracingMixin:
         if error:
             span.record_exception(error)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(error)))
-
+        else:
+            span.set_status(trace.StatusCode.OK)
         # Cerramos el context manager para liberar el span
         span._ctx_manager.__exit__(None, None, None)
 
