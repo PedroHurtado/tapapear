@@ -4,9 +4,10 @@ from .features import (
 from .appbuilder import AppBuilder
 from .build_router import build_router
 from .custom_fastapi import CustomFastApi
-from .empty_response import empty
+from .empty_response import EMPTY
+
 __all__ = [
-    "empty",
+    "EMPTY",
     "get_feature_routers",    
     "build_router",
     "AppBuilder",

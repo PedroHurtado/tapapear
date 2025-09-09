@@ -20,6 +20,11 @@ from pydantic import BaseModel, create_model, ValidationError
 from dataclasses import dataclass
 from enum import Enum
 
+# OpenTelemetry imports
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.semconv.trace import SpanAttributes
+
 
 class HTTPRetryError(Exception):
     def __init__(
@@ -75,6 +80,221 @@ class CompiledRequest:
     has_files_in_form: bool
     has_files_in_body: bool
     body_file_field: Optional[str]
+
+
+class TelemetryManager:
+    """Manager centralizado para telemetría OpenTelemetry"""
+
+    def __init__(self, tracer: trace.Tracer):
+        self.tracer = tracer
+
+    def create_main_span(self, method: str, path_template: str):
+        """Crea el span principal del request"""
+        return self.tracer.start_as_current_span(
+            name=f"{method} {path_template}",
+            kind=trace.SpanKind.CLIENT,
+        )
+
+    def create_child_span(self, name: str, parent_span=None):
+        """Crea un span hijo (usando el span padre si se pasa, o el actual en contexto)"""
+        if parent_span:
+            ctx = trace.set_span_in_context(parent_span)
+            return self.tracer.start_as_current_span(
+                name=name,
+                context=ctx,
+                kind=trace.SpanKind.INTERNAL,
+            )
+        return self.tracer.start_as_current_span(
+            name=name,
+            kind=trace.SpanKind.INTERNAL,
+        )
+
+    def set_main_span_attributes(
+        self,
+        span,
+        method: str,
+        url: str,
+        path_template: str,
+        compiled_req: CompiledRequest,
+        func_name: str,
+        class_name: str,
+        allow_anonymous: bool,
+        auth_type: str,
+        has_token: bool,
+        cache_hit: bool,
+    ):
+        """Establece atributos del span principal"""
+        span.set_attribute("http.request.method", method)
+        span.set_attribute("url.full", url)
+        span.set_attribute("url.template", path_template)
+        span.set_attribute("httpclient.method_name", func_name)
+        span.set_attribute("httpclient.class_name", class_name)
+        span.set_attribute("httpclient.allow_anonymous", allow_anonymous)
+        span.set_attribute("httpclient.auth.type", auth_type)
+        span.set_attribute("httpclient.auth.has_token", has_token)
+        span.set_attribute("httpclient.compilation.cache_hit", cache_hit)
+
+        if compiled_req.request_type:
+            span.set_attribute(
+                "httpclient.request_type", compiled_req.request_type.value
+            )
+
+        span.set_attribute(
+            "httpclient.has_files",
+            compiled_req.has_files_in_form or compiled_req.has_files_in_body,
+        )
+        span.set_attribute("httpclient.has_query", compiled_req.has_query)
+        span.set_attribute(
+            "httpclient.return_type",
+            compiled_req.return_type.__name__
+            if compiled_req.return_type != inspect.Signature.empty
+            else "Any",
+        )
+        span.set_attribute("httpclient.is_return_list", compiled_req.is_return_list)
+        span.set_attribute("httpclient.is_return_file", compiled_req.is_return_file)
+
+    def set_response_attributes(self, span, response: httpx.Response):
+        """Establece atributos de respuesta"""
+        span.set_attribute("http.response.status_code", response.status_code)
+        span.set_attribute("http.response.body.size", len(response.content))
+
+        content_type = response.headers.get("content-type")
+        if content_type:
+            span.set_attribute("httpclient.response.content_type", content_type)
+
+    def set_request_size_attributes(self, span, request_data: Dict[str, Any]):
+        """Establece atributos de tamaño del request"""
+        size = 0
+        if request_data.get("json"):
+            size += len(str(request_data["json"]).encode())
+        elif request_data.get("content"):
+            size += len(request_data["content"])
+        elif request_data.get("data"):
+            size += len(str(request_data["data"]).encode())
+
+        if size > 0:
+            span.set_attribute("http.request.body.size", size)
+
+    def set_files_attributes(self, span, files_data):
+        """Establece atributos de archivos"""
+        if not files_data:
+            return
+
+        file_count = len(files_data) if isinstance(files_data, list) else 1
+        total_size = 0
+
+        if isinstance(files_data, list):
+            for _, (_, content, _) in files_data:
+                if isinstance(content, bytes):
+                    total_size += len(content)
+
+        span.set_attribute("httpclient.files.count", file_count)
+        if total_size > 0:
+            span.set_attribute("httpclient.files.total_size", total_size)
+
+    def set_validation_attributes(self, span, param_model: Type[BaseModel]):
+        """Establece atributos de validación"""
+        span.set_attribute(
+            "httpclient.validation.param_count", len(param_model.model_fields)
+        )
+        span.set_attribute("httpclient.validation.model_name", param_model.__name__)
+
+    def set_build_attributes(
+        self,
+        span,
+        path_params: List[str],
+        has_query: bool,
+        request_type: Optional[RequestType],
+        query_data,
+    ):
+        """Establece atributos de construcción del request"""
+        span.set_attribute("httpclient.build.url_params_count", len(path_params))
+        span.set_attribute("httpclient.build.has_body", request_type == RequestType.BODY)
+        span.set_attribute(
+            "httpclient.build.has_form_data", request_type == RequestType.FORM_DATA
+        )
+
+        if has_query and query_data:
+            span.set_attribute("httpclient.build.query_params_count", len(query_data))
+
+    def set_retry_attributes(
+        self,
+        span,
+        attempt: int,
+        max_attempts: int,
+        backoff_factor: float,
+        wait_time: float,
+        reason: str,
+        last_status_code: Optional[int],
+        exception_type: Optional[str],
+    ):
+        """Establece atributos de retry"""
+        span.set_attribute("httpclient.retry.attempt", attempt)
+        span.set_attribute("httpclient.retry.max_attempts", max_attempts)
+        span.set_attribute("httpclient.retry.backoff_factor", backoff_factor)
+        span.set_attribute("httpclient.retry.wait_time_ms", int(wait_time * 1000))
+        span.set_attribute("httpclient.retry.reason", reason)
+
+        if last_status_code:
+            span.set_attribute("httpclient.retry.last_status_code", last_status_code)
+        if exception_type:
+            span.set_attribute("httpclient.retry.exception_type", exception_type)
+
+    def set_parse_attributes(
+        self,
+        span,
+        content_type: Optional[str],
+        return_type: Type,
+        is_file: bool,
+        is_list: bool,
+        item_count: Optional[int],
+    ):
+        """Establece atributos de parsing"""
+        if content_type:
+            span.set_attribute("httpclient.parse.content_type", content_type)
+
+        span.set_attribute(
+            "httpclient.parse.response_type",
+            return_type.__name__
+            if return_type != inspect.Signature.empty
+            else "Any",
+        )
+        span.set_attribute("httpclient.parse.is_file", is_file)
+        span.set_attribute("httpclient.parse.is_list", is_list)
+
+        if is_list and item_count is not None:
+            span.set_attribute("httpclient.parse.item_count", item_count)
+
+    def finish_span_ok(self, span):
+        """Finaliza un span con status OK"""
+        if span and span.is_recording():
+            span.set_status(Status(StatusCode.OK))
+            
+
+    # En la clase TelemetryManager
+    def finish_span_error(self, span, error: Exception, record_exception: bool = True):
+        """Finaliza un span con status ERROR.
+            Args:
+                span: El span a finalizar
+            error: La excepción que causó el error
+            record_exception: Si es True, registra la excepción en el span.
+                            Usar False en spans padres para evitar duplicar el stack trace.
+        """
+        if span and span.is_recording():
+            # Siempre establecer el status con el mensaje de error
+            
+            
+            
+            # Solo registra la excepción si se solicita y no ha sido registrada antes
+            if record_exception:
+                status_description = str(error)
+                span.set_status(Status(StatusCode.ERROR, status_description))
+            else:
+                span.set_status(Status(StatusCode.ERROR))
+                #span.record_exception(error)
+
+
+
 
 
 class TypeInspector:
@@ -482,36 +702,58 @@ class RequestBuilder:
 class ResponseParser:
     """Responsable de parsear las respuestas HTTP"""
 
-    def parse_response(self, response: httpx.Response, compiled_req: CompiledRequest):
+    def __init__(self, telemetry: TelemetryManager):
+        self.telemetry = telemetry
+
+    def parse_response(self, response: httpx.Response, compiled_req: CompiledRequest, parent_span):
         """Parsea la respuesta según las especificaciones"""
-        if response.status_code == 204:
-            return ""
+        with self.telemetry.create_child_span("parse_response", parent_span) as parse_span:
+            try:
+                content_type = response.headers.get("content-type", "").lower()
+                result = None
+                item_count = None
 
-        content_type = response.headers.get("content-type", "").lower()
+                if response.status_code == 204:
+                    result = ""
+                elif compiled_req.is_return_file:
+                    result = self._parse_file_response(response, content_type)
+                else:
+                    # Caso JSON o fallback texto
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        data = response.text
 
-        # Caso File (único)
-        if compiled_req.is_return_file:
-            return self._parse_file_response(response, content_type)
+                    if compiled_req.return_type == inspect.Signature.empty:
+                        result = data
+                    elif compiled_req.is_return_list:
+                        if data is None:
+                            result = []
+                            item_count = 0
+                        else:
+                            result = [
+                                self._parse_model(compiled_req.return_type, item) for item in data
+                            ]
+                            item_count = len(result)
+                    else:
+                        result = self._parse_model(compiled_req.return_type, data)
 
-        # Caso JSON o fallback texto
-        try:
-            data = response.json()
-        except ValueError:
-            data = response.text
+                # Establecer atributos de telemetría
+                self.telemetry.set_parse_attributes(
+                    parse_span,
+                    content_type,
+                    compiled_req.return_type,
+                    compiled_req.is_return_file,
+                    compiled_req.is_return_list,
+                    item_count
+                )
 
-        if compiled_req.return_type == inspect.Signature.empty:
-            return data
+                self.telemetry.finish_span_ok(parse_span)
+                return result
 
-        if compiled_req.is_return_list:
-            return (
-                []
-                if data is None
-                else [
-                    self._parse_model(compiled_req.return_type, item) for item in data
-                ]
-            )
-
-        return self._parse_model(compiled_req.return_type, data)
+            except Exception as e:
+                self.telemetry.finish_span_error(parse_span, e, True)  # Registrar en el nivel donde se origina
+                raise
 
     def _parse_file_response(self, response: httpx.Response, content_type: str) -> File:
         """Parsea respuesta de tipo File"""
@@ -539,23 +781,32 @@ class ResponseParser:
 class ArgumentValidator:
     """Responsable de validar argumentos contra modelos Pydantic"""
 
-    def validate_args(self, compiled_req: CompiledRequest, args, kwargs) -> BaseModel:
+    def __init__(self, telemetry: TelemetryManager):
+        self.telemetry = telemetry
+
+    def validate_args(self, compiled_req: CompiledRequest, args, kwargs, parent_span) -> BaseModel:
         """Valida los argumentos contra el modelo Pydantic"""
-        bound_args: Dict[str, Any] = {}
+        with self.telemetry.create_child_span("validate_arguments", parent_span) as validation_span:
+            try:
+                bound_args: Dict[str, Any] = {}
 
-        if args:
-            param_names = list(compiled_req.param_model.model_fields.keys())
-            for i, arg in enumerate(args[1:]):  # saltar self
-                if i < len(param_names):
-                    bound_args[param_names[i]] = arg
+                if args:
+                    param_names = list(compiled_req.param_model.model_fields.keys())
+                    for i, arg in enumerate(args[1:]):  # saltar self
+                        if i < len(param_names):
+                            bound_args[param_names[i]] = arg
 
-        bound_args.update(kwargs)
+                bound_args.update(kwargs)
 
-        try:
-            return compiled_req.param_model(**bound_args)
-        except ValidationError as e:
-            func_name = getattr(args[0], "__class__", {}).get("__name__", "unknown")
-            raise ValueError(f"Invalid arguments for {func_name}: {e}") from e
+                # Establecer atributos de telemetría
+                self.telemetry.set_validation_attributes(validation_span, compiled_req.param_model)
+
+                validated = compiled_req.param_model(**bound_args)
+                self.telemetry.finish_span_ok(validation_span)
+                return validated            
+            except Exception as e:
+                self.telemetry.finish_span_error(validation_span, e, True)
+                raise
 
 
 class HttpClient:
@@ -568,11 +819,19 @@ class HttpClient:
         headers: Optional[Dict[str, str]] = None,
         max_retries: int = 3,
         backoff_factor: float = 1.0,
+        tracer_name: str = "httpclient",
     ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
         self.headers = headers or {}
+        self.max_retries = max_retries
+        self.backoff_factor = backoff_factor
         self._compiled_cache: Dict[str, CompiledRequest] = {}
+        
+        # Configurar telemetría
+        self.tracer = trace.get_tracer(tracer_name)
+        self.telemetry = TelemetryManager(self.tracer)
+        
         self.retryable_exceptions: Set[type] = {
             httpx.TimeoutException,
             httpx.ConnectTimeout,
@@ -600,13 +859,24 @@ class HttpClient:
             523,
             524,
         }
+        
         # Inicializar componentes
         self.type_inspector = TypeInspector()
         self.request_detector = RequestTypeDetector(self.type_inspector)
         self.compiler = RequestCompiler(self.type_inspector, self.request_detector)
         self.request_builder = RequestBuilder(self.type_inspector)
-        self.response_parser = ResponseParser()
-        self.argument_validator = ArgumentValidator()
+        self.response_parser = ResponseParser(self.telemetry)
+        self.argument_validator = ArgumentValidator(self.telemetry)
+
+    def _get_auth_info(self) -> Tuple[str, bool]:
+        """Obtiene información de autenticación para telemetría"""
+        if self.auth is None:
+            return "none", False
+        elif isinstance(self.auth, ContextAuth):
+            token = jwt_token_var.get()
+            return "context", token is not None
+        else:
+            return "custom", True
 
     def _is_retryable_exception(self, exception: Exception) -> bool:
         return type(exception) in self.retryable_exceptions
@@ -614,51 +884,125 @@ class HttpClient:
     def _is_retryable_http_status_error(self, exception: httpx.HTTPStatusError) -> bool:
         return exception.response.status_code in self.retryable_status_codes
 
-    async def _calculate_backoff(self, attempt: int) -> None:
+    async def _calculate_backoff(self, attempt: int) -> float:
+        wait_time = self.backoff_factor * (2 ** (attempt - 1))
         if attempt > 0:
-            wait_time = self.backoff_factor * (2 ** (attempt - 1))
             await asyncio.sleep(wait_time)
+        return wait_time
 
-    async def _send_request(
-        self, method: str, request: Dict[str, Any]
+    async def _send_request_with_retries(
+        self, method: str, request: Dict[str, Any], parent_span
     ) -> httpx.Response:
-        url = request.pop("url")
+        """Envía el request con lógica de retry y telemetría"""
+        url = request["url"]
         cause = None
         status_code: Optional[int] = None
 
         for attempt in range(self.max_retries + 1):
+            retry_span = None
+            
+            # Crear span de retry solo si no es el primer intento
+            if attempt > 0:
+                retry_span = self.telemetry.create_child_span(f"retry_attempt_{attempt}", parent_span)
+
             try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.request(method, url, **request)
-                    status_code = response.status_code
-                    response.raise_for_status()
-                    return response
+                # Crear span HTTP para cada intento
+                with self.telemetry.create_child_span("http_request", parent_span) as http_span:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.request(method, url, **{k: v for k, v in request.items() if k != "url"})
+                            status_code = response.status_code
+                            
+                            # Establecer atributos del span HTTP
+                            http_span.set_attribute("http.request.method", method)
+                            http_span.set_attribute("http.response.status_code", status_code)
+                            http_span.set_attribute("network.protocol.name", "http")
+                            
+                            # Intentar obtener información adicional
+                            if hasattr(response, 'url') and response.url:
+                                http_span.set_attribute("server.address", response.url.host or "unknown")
+                                if response.url.port:
+                                    http_span.set_attribute("server.port", response.url.port)
+
+                            response.raise_for_status()
+                            self.telemetry.finish_span_ok(http_span)
+                            
+                            # Si llegamos aquí, el request fue exitoso
+                            if retry_span:
+                                self.telemetry.finish_span_ok(retry_span)
+                            
+                            return response
+
+                    except Exception as e:
+                        # El span HTTP falló
+                        self.telemetry.finish_span_error(http_span, e, True)  # Registrar en el span HTTP
+                        raise e
 
             except Exception as e:
                 cause = e
                 should_retry = False
+                reason = "unknown"
+                exception_type = type(e).__name__
 
                 if isinstance(e, httpx.HTTPStatusError):
                     should_retry = self._is_retryable_http_status_error(e)
+                    reason = "status_code"
+                    status_code = e.response.status_code
                 else:
                     should_retry = self._is_retryable_exception(e)
+                    if should_retry:
+                        if "timeout" in exception_type.lower():
+                            reason = "timeout"
+                        elif "network" in exception_type.lower() or "connect" in exception_type.lower():
+                            reason = "network_error"
 
                 if should_retry and attempt < self.max_retries:
-                    await self._calculate_backoff(attempt + 1)
+                    wait_time = await self._calculate_backoff(attempt + 1)
+                    
+                    # Establecer atributos del span de retry
+                    if retry_span:
+                        self.telemetry.set_retry_attributes(
+                            retry_span,
+                            attempt + 1,
+                            self.max_retries,
+                            self.backoff_factor,
+                            wait_time,
+                            reason,
+                            status_code,
+                            exception_type
+                        )
+                        self.telemetry.finish_span_ok(retry_span)
+                    
                     continue
                 else:
+                    # No se puede reintentar o se agotaron los reintentos
+                    if retry_span:
+                        self.telemetry.set_retry_attributes(
+                            retry_span,
+                            attempt + 1,
+                            self.max_retries,
+                            self.backoff_factor,
+                            0.0,
+                            reason,
+                            status_code,
+                            exception_type
+                        )
+                        self.telemetry.finish_span_error(retry_span, e, False)  # No registrar en el span de retry
+                    
                     if not should_retry:
                         raise e
                     break
 
-        raise HTTPRetryError(
+        # Si llegamos aquí, se agotaron todos los reintentos
+        retry_error = HTTPRetryError(
             f"Request failed after {self.max_retries + 1} attempts. "
             f"Last error: {type(cause).__name__}: {str(cause)}",
-            cause,
             self.max_retries + 1,
             url,
             status_code,
+            cause,
         )
+        raise retry_error
 
     def _decorator(
         self,
@@ -671,30 +1015,105 @@ class HttpClient:
 
         def wrapper(func: Callable) -> Callable:
             cache_key = f"{func.__module__}.{func.__qualname__}"
-            compiled_req = self._compiled_cache.get(
-                cache_key
-            ) or self.compiler.compile_request(func, path)
-            self._compiled_cache[cache_key] = compiled_req
-
+            
             @functools.wraps(func)
             async def inner(*args, **kwargs) -> Any:
-                validated = self.argument_validator.validate_args(
-                    compiled_req, args, kwargs
-                )
+                # Crear span principal
+                with self.telemetry.create_main_span(method, path) as main_span:
+                    try:
+                        # Compilar request (con cache)
+                        cache_hit = cache_key in self._compiled_cache
+                        if not cache_hit:
+                            self._compiled_cache[cache_key] = self.compiler.compile_request(func, path)
+                        compiled_req = self._compiled_cache[cache_key]
 
-                request = self.request_builder.build_request(
-                    self.base_url,
-                    path,
-                    compiled_req,
-                    validated,
-                    self.auth,
-                    self.headers,
-                    allow_anonymous,
-                    headers,
-                )
+                        # Obtener información de autenticación
+                        auth_type, has_token = self._get_auth_info()
+                        
+                        # Obtener información de clase y función
+                        class_name = args[0].__class__.__name__ if args else "unknown"
+                        func_name = func.__name__
 
-                response = await self._send_request(method, request)
-                return self.response_parser.parse_response(response, compiled_req)
+                        try:
+                            # Validar argumentos
+                            validated = self.argument_validator.validate_args(
+                                compiled_req, args, kwargs, main_span
+                            )
+                        except Exception as e:
+                            # No registrar la excepción en el span principal
+                            self.telemetry.finish_span_error(main_span, e, False)
+                            raise
+
+                        # Construir request
+                        with self.telemetry.create_child_span("build_request", main_span) as build_span:
+                            try:
+                                request = self.request_builder.build_request(
+                                    self.base_url,
+                                    path,
+                                    compiled_req,
+                                    validated,
+                                    self.auth,
+                                    self.headers,
+                                    allow_anonymous,
+                                    headers,
+                                )
+
+                                # Establecer atributos de construcción
+                                query_data = request.get("params")
+                                self.telemetry.set_build_attributes(
+                                    build_span,
+                                    compiled_req.path_params,
+                                    compiled_req.has_query,
+                                    compiled_req.request_type,
+                                    query_data
+                                )
+
+                                self.telemetry.finish_span_ok(build_span)
+
+                            except Exception as e:
+                                self.telemetry.finish_span_error(build_span, e, True)
+                                raise
+
+                        # Establecer atributos del span principal
+                        self.telemetry.set_main_span_attributes(
+                            main_span,
+                            method,
+                            request["url"],
+                            path,
+                            compiled_req,
+                            func_name,
+                            class_name,
+                            allow_anonymous,
+                            auth_type,
+                            has_token,
+                            cache_hit
+                        )
+
+                        # Establecer atributos de tamaño del request
+                        self.telemetry.set_request_size_attributes(main_span, request)
+
+                        # Establecer atributos de archivos si aplica
+                        files_data = request.get("files")
+                        if files_data:
+                            self.telemetry.set_files_attributes(main_span, files_data)
+
+                        # Enviar request
+                        response = await self._send_request_with_retries(method, request, main_span)
+
+                        # Establecer atributos de respuesta
+                        self.telemetry.set_response_attributes(main_span, response)
+
+                        # Parsear respuesta
+                        result = self.response_parser.parse_response(response, compiled_req, main_span)
+
+                        # Finalizar span principal con éxito
+                        self.telemetry.finish_span_ok(main_span)
+                        return result
+
+                    except Exception as e:
+                        # Finalizar span principal con error
+                        self.telemetry.finish_span_error(main_span, e, False)
+                        raise
 
             return inner
 
