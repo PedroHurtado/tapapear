@@ -37,7 +37,8 @@ class Service(CommandHadler[Request]):
     def __init__(self,http_post:HpptPost):
         self._http_post = http_post
     async def handler(self, command:Request):
-        response = await self._http_post.create(Post(id=5,title="Jose Manuel Hurtado"))
+        #response = await self._http_post.create(Post(id=5,title="Jose Manuel Hurtado"))
+        response = await self._http_post.create()
         
 
 @router.put(

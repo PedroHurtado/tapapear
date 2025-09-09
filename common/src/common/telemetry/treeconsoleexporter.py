@@ -188,7 +188,7 @@ class TreeConsoleSpanExporter(SpanExporter):
             if layer == "application":
                 clean_name = clean_name.replace("application.", "")
             elif layer == "infrastructure":
-                clean_name = clean_name.replace("infrastructure.", "").replace("infraestructure.", "")
+                clean_name = clean_name.replace("infraestructure.", "")
             elif layer == "domain":
                 clean_name = clean_name.replace("domain.", "")
             
