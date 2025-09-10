@@ -62,7 +62,7 @@ class RepoMeta(type):
 
     INPUT_MAPPING_OPERATIONS = {"create", "update", "delete"}
     OUTPUT_MAPPING_OPERATIONS = {"get"}
-    DOMAIN_EVENT_OPERATIONS = {"create", "update"}
+    DOMAIN_EVENT_OPERATIONS = {"create", "update", "delete"}
 
     def __new__(cls, name, bases, dct):
         delegate_attrs = cls._extract_delegate_attributes(dct)
@@ -112,7 +112,7 @@ class RepoMeta(type):
         async def async_method(self, *args, **kwargs):
             # Create root span for the repository operation
             with tracer.start_as_current_span(
-                f"infraestructure.repository.{protected_name}",
+                f"infrastructure.repository.{protected_name}",
                 kind=trace.SpanKind.INTERNAL
             ) as span:
                 try:
@@ -124,13 +124,13 @@ class RepoMeta(type):
                     target = RepoMeta._get_target_method(self, protected_name)
 
                     # Apply input mapping with tracing
-                    args, kwargs = await RepoMeta._apply_input_mapping_with_trace(
+                    args_doc, kwargs_doc = await RepoMeta._apply_input_mapping_with_trace(
                         self, args, kwargs, needs_input_map, span
                     )
 
                     # Execute repository method with tracing
                     result = await RepoMeta._execute_concrete_repo_with_trace(
-                        target, args, kwargs, span, self, protected_name
+                        target, args_doc, kwargs_doc, span, self, protected_name
                     )
 
                     # Handle domain events with tracing
@@ -182,7 +182,7 @@ class RepoMeta(type):
             return args, kwargs
 
         with tracer.start_as_current_span(
-            "infraestructure.repository.input_mapping",
+            "infrastructure.repository.input_mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -220,7 +220,7 @@ class RepoMeta(type):
     async def _execute_concrete_repo_with_trace(target, args, kwargs, parent_span, instance, protected_name):
         """Execute the concrete repository method with tracing."""
         with tracer.start_as_current_span(
-            f"infraestructure.repository.concrete.{protected_name}",
+            f"infrastructure.repository.concrete.{protected_name}",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -254,7 +254,7 @@ class RepoMeta(type):
             return
 
         with tracer.start_as_current_span(
-            "infraestructure.repository.domain_events",
+            "infrastructure.repository.domain_events",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -292,7 +292,7 @@ class RepoMeta(type):
     async def _notify_single_event_with_trace(event_bus, event, event_index, parent_span):
         """Notify a single domain event with tracing."""
         with tracer.start_as_current_span(
-            f"infraestructure.repository.event_notification",
+            f"infrastructure.repository.event_notification",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -302,8 +302,8 @@ class RepoMeta(type):
                 span.set_attribute("event_bus.class", event_bus.__class__.__name__)
                 
                 # Add event-specific attributes if available
-                if hasattr(event, 'entity_id'):
-                    span.set_attribute("event.entity_id", str(event.entity_id))
+                if hasattr(event, 'id'):
+                    span.set_attribute("event.entity_id", str(event.id))
                 
                 # Notify the event
                 await event_bus.notify(event)
@@ -320,7 +320,7 @@ class RepoMeta(type):
     async def _apply_output_mapping_with_trace(instance, result, parent_span):
         """Apply output mapping with OpenTelemetry tracing."""
         with tracer.start_as_current_span(
-            "infraestructure.repository.output_mapping",
+            "infrastructure.repository.output_mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:

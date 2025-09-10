@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
-from common.domain import BaseEntity
+from common.domain import BaseEntity, DomainEvent, DomainEventContainer
+from common.util import ID
 from enum import Enum
 
 
@@ -37,9 +38,12 @@ Si de un inferior pasa a un superior se cargará la parte proporcial del mes
 En el caso de desactivar la suscripción no se abonará nada?
 
 """
+class CustomerCreateEvent(DomainEvent):
+    @staticmethod
+    def create(id:ID):
+        return CustomerCreateEvent(aggregate="customer",aggregate_id=id)
 
-
-class Customer(BaseEntity):
+class Customer(BaseEntity, DomainEventContainer):
     def __init__(
         self,
         id: uuid,
@@ -78,7 +82,7 @@ class Customer(BaseEntity):
         self._addres = address
         self._tax_type = tax_type
         self._tax_numbrer = tax_number
-        raise ConflictDomainException("El dni está duplicado")
+        
 
     def activate(self):
         self._status = ClientStatus.ACTIVE
@@ -98,7 +102,7 @@ class Customer(BaseEntity):
         tax_type: TaxType,
         tax_number: str,
     ) -> "Customer":
-        return Customer(
+        customer= Customer(
             id=id,
             name=name,
             country=country,
@@ -110,6 +114,8 @@ class Customer(BaseEntity):
             tax_number=tax_number,
             status=ClientStatus.ACTIVE
         )
+        customer.add_event(CustomerCreateEvent.create(id))
+        return customer
 
     @property
     def name(self) -> str:

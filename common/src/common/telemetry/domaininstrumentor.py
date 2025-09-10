@@ -146,7 +146,7 @@ class DomainInstrumentor(BaseInstrumentor):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             tracer = trace.get_tracer(__name__)
-            span_name = f"domain.entity.{entity_class.__name__}.{method_name}"
+            span_name = f"domain.{entity_class.__name__}.{method_name}"
             with tracer.start_as_current_span(span_name) as span:
                 try:
                     result = func(*args, **kwargs)
@@ -163,8 +163,7 @@ class DomainInstrumentor(BaseInstrumentor):
 
                     span.set_attributes({
                         "entity.type": entity_class.__name__,
-                        "entity.method": method_name,
-                        "domain.layer": "entity",
+                        "entity.method": method_name,                        
                         "entity.id": str(entity_id),
                         "entity.has_events": events_after > 0
                     })

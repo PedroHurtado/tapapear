@@ -1,1 +1,1 @@
-from .customer import Customer, TaxType, ClientStatus 
+from .customer import Customer, TaxType, ClientStatus, CustomerCreateEvent

@@ -1,4 +1,4 @@
-from common.infraestructure import document, Document, initialize_database
+from common.infrastructure import document, Document, initialize_database
 from uuid import uuid4
 @document
 class Bar(Document):

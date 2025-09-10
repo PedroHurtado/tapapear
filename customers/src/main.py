@@ -4,17 +4,19 @@ import logging
 if __name__ == "__main__":
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
+    
+    from common.domain import BaseEntity, DomainEventContainer
+
     from common.telemetry import (
         DomainInstrumentor,
-        TreeConsoleSpanExporter,
+        TreeConsoleSpanExporter,        
         FilteringSpanProcessor,
     )
-    from common.domain import BaseEntity, DomainEventContainer
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter
 
     # Instrumentación del dominio
     DomainInstrumentor().instrument(
@@ -23,12 +25,23 @@ if __name__ == "__main__":
 
     builder = AppBuilder().build()
 
-    # ---------- Configuración de OpenTelemetry ----------
+    # ---------- Configuración de OpenTelemetry ----------(Tree)    
     tracer_provider = TracerProvider()
     trace.set_tracer_provider(tracer_provider)
 
-    tree_exporter = TreeConsoleSpanExporter(show_attributes=True)
+    tree_exporter = TreeConsoleSpanExporter(show_attributes=False)
     tracer_provider.add_span_processor(FilteringSpanProcessor(BatchSpanProcessor(tree_exporter)))
+    
+    # ---------- Configuración de OpenTelemetry ----------(En bruto)    
+    """
+    tracer_provider = TracerProvider()
+    trace.set_tracer_provider(tracer_provider)
+
+    tree_exporter = ConsoleSpanExporter()
+    tracer_provider.add_span_processor(FilteringSpanProcessor(SimpleSpanProcessor(tree_exporter)))
+    """
+
+    
 
     # Instrumentación FastAPI con el TracerProvider ya configurado
     FastAPIInstrumentor.instrument_app(

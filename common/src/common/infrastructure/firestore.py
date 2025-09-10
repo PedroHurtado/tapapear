@@ -136,7 +136,7 @@ async def to_document(
 
 class FirestoreTracingMixin:
     def _start_span(self, operation: str, **attributes):
-        span_name = f"infraestructure.firestore.{operation}.{self._collection_name}"
+        span_name = f"infrastructure.firestore.{operation}.{self._collection_name}"
         ctx_manager = tracer.start_as_current_span(span_name,record_exception=True)
         span = ctx_manager.__enter__()  # activa el contexto y devuelve el span real
 

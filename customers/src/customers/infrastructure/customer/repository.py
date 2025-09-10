@@ -1,5 +1,5 @@
-from common.infraestructure.firestore import RepositoryFirestore
-from common.infraestructure.document import Document
+from common.infrastructure.firestore import RepositoryFirestore
+from common.infrastructure.document import Document
 from common.ioc import component, ProviderType
 from common.mapper import mapper_class
 from customers.domain.customer import Customer as CustomerDomain

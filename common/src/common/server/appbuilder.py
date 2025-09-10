@@ -73,7 +73,7 @@ class AppBuilder:
     def build(self) -> "AppBuilder":
 
         if self._config.env.firestore:
-            from common.infraestructure import initialize_database
+            from common.infrastructure import initialize_database
             initialize_database(self._config.env.firestore.credential_path)    
 
         """Construye la aplicación FastAPI."""
