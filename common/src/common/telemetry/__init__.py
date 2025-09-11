@@ -1,13 +1,13 @@
 from .config import setup_telemetry, get_logger,get_tracer,FilteringSpanProcessor
 from .decorators import traced_class
 from .domaininstrumentor import DomainInstrumentor
-from .treeconsoleexporter import TreeConsoleSpanExporter
+from .consoledevexporter import ConsoleDevExporter
 import opentelemetry.trace as trace
 
 
 
 __all__=[
-    "TreeConsoleSpanExporter",
+    "ConsoleDevExporter",    
     "DomainInstrumentor",
     "FilteringSpanProcessor",
     "setup_telemetry",

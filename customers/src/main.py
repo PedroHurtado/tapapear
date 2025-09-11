@@ -8,8 +8,8 @@ if __name__ == "__main__":
     from common.domain import BaseEntity, DomainEventContainer
 
     from common.telemetry import (
-        DomainInstrumentor,
-        TreeConsoleSpanExporter,        
+        DomainInstrumentor,        
+        ConsoleDevExporter,      
         FilteringSpanProcessor,
     )
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -25,12 +25,16 @@ if __name__ == "__main__":
 
     builder = AppBuilder().build()
 
-    # ---------- Configuración de OpenTelemetry ----------(Tree)    
+    # ---------- Configuración de OpenTelemetry ----------(Tree) 
+    
+    
     tracer_provider = TracerProvider()
     trace.set_tracer_provider(tracer_provider)
 
-    tree_exporter = TreeConsoleSpanExporter(show_attributes=False)
+    #tree_exporter = TreeConsoleSpanExporter(show_attributes=True)
+    tree_exporter = ConsoleDevExporter(show_attributes=True)
     tracer_provider.add_span_processor(FilteringSpanProcessor(BatchSpanProcessor(tree_exporter)))
+    
     
     # ---------- Configuración de OpenTelemetry ----------(En bruto)    
     """

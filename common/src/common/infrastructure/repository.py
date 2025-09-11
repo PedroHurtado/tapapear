@@ -145,7 +145,7 @@ class RepoMeta(type):
 
                     # Mark span as successful
                     span.set_status(Status(StatusCode.OK))
-                    span.set_attribute("repository.operation.success", True)
+                    
                     
                     return result
 
@@ -182,7 +182,7 @@ class RepoMeta(type):
             return args, kwargs
 
         with tracer.start_as_current_span(
-            "infrastructure.repository.input_mapping",
+            "infrastructure.repository.input.mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -206,14 +206,12 @@ class RepoMeta(type):
 
                 # Mark mapping as successful
                 span.set_status(Status(StatusCode.OK))
-                span.set_attribute("mapping.success", True)
+                
                 
                 return tuple(args), kwargs
 
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, f"Input mapping failed: {str(e)}"))
-                span.set_attribute("mapping.success", False)
-                span.set_attribute("mapping.error", str(e))
+                span.set_status(Status(StatusCode.ERROR, f"Input mapping failed: {str(e)}"))                
                 raise
 
     @staticmethod
@@ -233,14 +231,12 @@ class RepoMeta(type):
                 
                 # Mark execution as successful
                 span.set_status(Status(StatusCode.OK))
-                span.set_attribute("repository.concrete.success", True)
+                
                 
                 return result
 
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, f"Concrete repository execution failed: {str(e)}"))
-                span.set_attribute("repository.concrete.success", False)
-                span.set_attribute("repository.concrete.error", str(e))
+                span.set_status(Status(StatusCode.ERROR, f"Concrete repository execution failed: {str(e)}"))                
                 raise
 
     @staticmethod
@@ -254,7 +250,7 @@ class RepoMeta(type):
             return
 
         with tracer.start_as_current_span(
-            "infrastructure.repository.domain_events",
+            "infrastructure.repository.domain.events",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -278,21 +274,18 @@ class RepoMeta(type):
                 RepoMeta._clear_domain_events(entity)
                 
                 # Mark events processing as successful
-                span.set_status(Status(StatusCode.OK))
-                span.set_attribute("events.success", True)
+                span.set_status(Status(StatusCode.OK))                
                 span.set_attribute("events.cleared", True)
 
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, f"Domain events processing failed: {str(e)}"))
-                span.set_attribute("events.success", False)
-                span.set_attribute("events.error", str(e))
+                span.set_status(Status(StatusCode.ERROR, f"Domain events processing failed: {str(e)}"))                
                 raise
 
     @staticmethod
     async def _notify_single_event_with_trace(event_bus, event, event_index, parent_span):
         """Notify a single domain event with tracing."""
         with tracer.start_as_current_span(
-            f"infrastructure.repository.event_notification",
+            f"infrastructure.repository.event.notification",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -312,15 +305,14 @@ class RepoMeta(type):
                 span.set_status(Status(StatusCode.OK))
 
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, f"Event notification failed: {str(e)}"))
-                span.set_attribute("event.notification.error", str(e))
+                span.set_status(Status(StatusCode.ERROR, f"Event notification failed: {str(e)}"))                
                 raise
 
     @staticmethod
     async def _apply_output_mapping_with_trace(instance, result, parent_span):
         """Apply output mapping with OpenTelemetry tracing."""
         with tracer.start_as_current_span(
-            "infrastructure.repository.output_mapping",
+            "infrastructure.repository.output.mapping",
             kind=trace.SpanKind.INTERNAL
         ) as span:
             try:
@@ -341,24 +333,19 @@ class RepoMeta(type):
                         span.set_attribute("mapping.entity_id", str(result.id))
 
                 # Mark mapping as successful
-                span.set_status(Status(StatusCode.OK))
-                span.set_attribute("mapping.success", True)
+                span.set_status(Status(StatusCode.OK))                
                 
                 return mapped_result
 
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, f"Output mapping failed: {str(e)}"))
-                span.set_attribute("mapping.success", False)
-                span.set_attribute("mapping.error", str(e))
+                span.set_status(Status(StatusCode.ERROR, f"Output mapping failed: {str(e)}"))                
                 raise
 
     @staticmethod
     def _handle_span_error(span, exception, operation_name):
         """Handle errors in the main repository span."""
         span.set_status(Status(StatusCode.ERROR, f"Repository {operation_name} failed: {str(exception)}"))
-        span.set_attribute("repository.operation.success", False)
-        span.set_attribute("repository.operation.error", str(exception))
-        span.set_attribute("repository.operation.error_type", exception.__class__.__name__)
+       
 
     @staticmethod
     def _clear_domain_events(entity):

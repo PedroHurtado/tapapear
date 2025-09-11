@@ -242,7 +242,7 @@ class Mediator:
 
             if not cache_hit:
                 with self._tracer.start_as_current_span(
-                    "application.mediator.cache_build", record_exception=False
+                    "application.mediator.cache.build", record_exception=False
                 ) as build_span:
                     self._build_cache_entry(command_type)
                     build_span.set_status(StatusCode.OK)
@@ -303,7 +303,7 @@ class Mediator:
         def chain_factory(ctx: PipelineContext, parent_span):
             async def service_handler():
                 with self._tracer.start_as_current_span(
-                    "application.handler.execute", 
+                    "application.mediator.handler", 
                     record_exception=False,
                     context=trace.set_span_in_context(parent_span)
                 ) as hspan:
@@ -319,7 +319,7 @@ class Mediator:
                 def create_pipeline_handler(pipe, next_h, order):
                     async def pipeline_handler():
                         with self._tracer.start_as_current_span(
-                            "application.pipeline.execute",
+                            "application.mediator.pipeline",
                             record_exception=False,
                             context=trace.set_span_in_context(parent_span)
                         ) as pspan:
@@ -421,7 +421,7 @@ class EventBus:
         chain = h_data["chain_factory"](ctx, parent_span)
 
         with self._tracer.start_as_current_span(
-            "application.eventbus.handler_chain",
+            "application.eventbus.handler.chain",
             context=trace.set_span_in_context(parent_span)
         ) as span:
             span.set_attribute("eventbus.handler.index", idx)
@@ -488,7 +488,7 @@ class EventBus:
         def chain_factory(ctx: PipelineContext, parent_span):
             async def service_handler():
                 with self._tracer.start_as_current_span(
-                    "application.domain_event_handler.execute",
+                    "application.eventbus.handler",
                     context=trace.set_span_in_context(parent_span)
                 ) as hspan:
                     hspan.set_attribute("eventbus.handler.name", type(handler).__name__)
@@ -507,7 +507,7 @@ class EventBus:
                 def create_pipeline_handler(pipe, next_h, order):
                     async def pipeline_handler():
                         with self._tracer.start_as_current_span(
-                            "notification_pipeline.execute",
+                            "application.notification.pipeline",
                             context=trace.set_span_in_context(parent_span)
                         ) as pspan:
                             pspan.set_attribute(

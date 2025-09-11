@@ -7,7 +7,6 @@ from common.openapi import FeatureModel
 from common.mediator import Mediator, Command, CommandHadler
 from customers.domain.customer import Customer, TaxType
 from customers.infrastructure.customer import RepositoryCustomer
-from datetime import date
 
 router = build_router("customers")
 
@@ -39,7 +38,7 @@ class Service(CommandHadler[Request]):
         tax_type = TaxType("", "")
         customer = Customer.create(
             get_id(), req.name, "", "", "", get_now(), 200, tax_type, "52"
-        )
+        )        
         await self._repository.create(customer)
         return self._mapper.to(Response).map(customer)
 

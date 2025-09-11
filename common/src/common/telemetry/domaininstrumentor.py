@@ -172,16 +172,11 @@ class DomainInstrumentor(BaseInstrumentor):
                         event_types = [getattr(e, "event_type", e.__class__.__name__) for e in instance._domain_events]
                         span.set_attribute("entity.event_types", ",".join(event_types))
 
-                    span.set_attribute("method.success", True)
+                    
                     span.set_status(Status(StatusCode.OK))
                     return result
                 except Exception as e:
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    span.set_attributes({
-                        "error.type": e.__class__.__name__,
-                        "error.message": str(e),
-                        "method.success": False
-                    })
+                    span.set_status(Status(StatusCode.ERROR, str(e)))                    
                     raise
 
         return wrapper

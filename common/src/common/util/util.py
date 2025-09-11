@@ -17,3 +17,4 @@ def get_id()->UUID:
 
 def get_now()->datetime:
     return datetime.now(timezone.utc)
+
