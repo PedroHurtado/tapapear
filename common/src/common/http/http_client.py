@@ -91,22 +91,23 @@ class TelemetryManager:
     def create_main_span(self, method: str, path_template: str):
         """Crea el span principal del request"""
         return self.tracer.start_as_current_span(
-            name=f"{method} {path_template}",
+            name=f"infrastructure.{method} {path_template}",
             record_exception=False,            
         )
 
     def create_child_span(self, name: str, parent_span=None):
         """Crea un span hijo (usando el span padre si se pasa, o el actual en contexto)"""
+        trace_name = f"infrastructure.{name}"
         if parent_span:
             ctx = trace.set_span_in_context(parent_span)
             return self.tracer.start_as_current_span(
-                name=name,
+                name=trace_name,
                 context=ctx,
                 record_exception=False
                 
             )
         return self.tracer.start_as_current_span(
-            name=name            
+            name=trace_name            
         )
 
     def set_main_span_attributes(

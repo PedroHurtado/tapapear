@@ -20,104 +20,8 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor,Response
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
-
-# -----------------------------
-# Exportador custom agrupado
-# -----------------------------
-class DevConsoleSpanExporter(SpanExporter):
-    """
-    Exportador custom para desarrollo:
-    imprime spans agrupados en un único JSON con un solo 'resource'.
-    """
-
-    def __init__(self, pretty: bool = True):
-        super().__init__()
-        self.pretty = pretty
-
-    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
-        if not spans:
-            return SpanExportResult.SUCCESS
-
-        # Tomamos el resource del primer span (todos deben compartirlo)
-        resource_attrs = dict(spans[0].resource.attributes) if spans[0].resource else {}
-
-        payload = {
-            "resource": resource_attrs,
-            "spans": [self._span_to_dict(s) for s in spans],
-        }
-
-        if self.pretty:
-            print(json.dumps(payload, indent=2, ensure_ascii=False))
-        else:
-            print(json.dumps(payload, ensure_ascii=False))
-
-        return SpanExportResult.SUCCESS
-
-    # --- helpers de serialización ----
-    @staticmethod
-    def _ns_to_iso(nanos: int) -> str:
-        # OpenTelemetry usa epoch en nanosegundos
-        return datetime.fromtimestamp(nanos / 1e9, tz=timezone.utc).isoformat()
-
-    @staticmethod
-    def _attrs_to_dict(attrs: Optional[Mapping[str, Any]]) -> Mapping[str, Any]:
-        if not attrs:
-            return {}
-        # Convertimos posibles valores no-JSON (ej: bytes) a str
-        out = {}
-        for k, v in attrs.items():
-            if isinstance(v, (bytes, bytearray)):
-                out[k] = v.decode("utf-8", errors="replace")
-            else:
-                out[k] = v
-        return out
-
-    def _span_to_dict(self, span: ReadableSpan) -> Mapping[str, Any]:
-        ctx = span.get_span_context()
-
-        start_iso = self._ns_to_iso(span.start_time)
-        end_iso = self._ns_to_iso(span.end_time)
-        duration_ms = (span.end_time - span.start_time) / 1e6
-
-        events: List[Mapping[str, Any]] = []
-        for ev in span.events:
-            events.append(
-                {
-                    "name": ev.name,
-                    "time": self._ns_to_iso(ev.timestamp),
-                    "attributes": self._attrs_to_dict(ev.attributes),
-                }
-            )
-
-        links: List[Mapping[str, Any]] = []
-        for link in span.links:
-            links.append(
-                {
-                    "trace_id": format(link.context.trace_id, "032x"),
-                    "span_id": format(link.context.span_id, "016x"),
-                    "attributes": self._attrs_to_dict(link.attributes),
-                }
-            )
-
-        parent_id = format(span.parent.span_id, "016x") if span.parent else None
-
-        return {
-            "name": span.name,
-            "context": {
-                "trace_id": format(ctx.trace_id, "032x"),
-                "span_id": format(ctx.span_id, "016x"),
-            },
-            "parent_id": parent_id,
-            "kind": str(span.kind),
-            "start_time": start_iso,
-            "end_time": end_iso,
-            "duration_ms": duration_ms,
-            "status": str(span.status.status_code),
-            "attributes": self._attrs_to_dict(span.attributes),
-            "events": events,
-            "links": links,
-        }
-
+from common.ioc import inject,deps
+from common.security import Principal
 
 # --------------------------------------
 # Procesador que filtra spans de ruido
@@ -132,55 +36,37 @@ class FilteringSpanProcessor(SpanProcessor):
     def __init__(self, inner_processor: SpanProcessor):
         self._inner = inner_processor
 
-    def on_start(self, span, parent_context=None):
-        # Seguimos permitiendo que el processor interno reciba on_start
+    @inject
+    def on_start(self, span, parent_context=None, principal:Principal = deps(Principal)):                
+        
+        if principal:
+            span.set_attribute("enduser.id", str(principal.id))                        
+            span.set_attribute("user.role", principal.role) 
+            if principal.tenant:
+                span.set_attribute("app.tenant.id", str(principal.tenant)) 
+        else:
+            pass
+        if span.kind == trace.SpanKind.SERVER or span.kind == trace.SpanKind.CLIENT:        
+            if span.status.status_code == StatusCode.UNSET:
+                span.set_status(Status(StatusCode.OK))
+
         self._inner.on_start(span, parent_context)
 
-    def on_end(self, span):
-        # Misma lógica de filtrado que tenías
-        span_name = span.name or ""
-        noisy = (
-            "http send" in span_name
-            or "http receive" in span_name
-            or "http.response.start" in span_name
-            or "http.response.body" in span_name
-            or span.attributes.get("asgi.event.type") is not None
-        )
+    def on_end(self, span, principal:Principal = deps(Principal)):  
+                         
+        noisy = span.attributes.get("asgi.event.type") is not None        
         if not noisy:
-            self._inner.on_end(span)
-        # Si es ruidoso, NO lo pasamos al inner y por tanto no se exporta
-
-    def shutdown(self):
-        return self._inner.shutdown()
-
-    def force_flush(self, timeout_millis: int = 30000):
-        return self._inner.force_flush(timeout_millis)
+            self._inner.on_end(span)        
 
 
-# --------------------------------------
-# (Opcional) Enriquecedor del nombre del tracer
-# --------------------------------------
-class TracerNameProcessor(SpanProcessor):
-    """Inyecta 'tracer_name' como atributo de span (opcional)."""
 
-    def on_start(self, span, parent_context=None):
-        scope = getattr(span, "instrumentation_scope", None)
-        if scope and getattr(scope, "name", None):
-            span.set_attribute("tracer_name", str(scope.name))
 
-    def on_end(self, span):
-        pass
-
-    def shutdown(self):
-        pass
-
-    def force_flush(self, timeout_millis=30000):
-        pass
 
 
 # --------------------------------------
 # structlog + correlación con trazas
 # --------------------------------------
+
 def add_service_name(service_name: str, service_version: str):
     """Processor de structlog para añadir servicio + correlación OTel."""
 

@@ -8,29 +8,30 @@ from contextvars import ContextVar
 from pydantic import BaseModel
 from common.ioc import component, ProviderType
 from common.context import context
+from common.util import ID
 import inspect
 
 security_scheme = HTTPBearer(auto_error=False)
 
 principal_ctx: ContextVar[Optional["Principal"]] = ContextVar("principal", default=None)
 
-class PrincipalNotSetError(Exception):
-    """Excepción lanzada cuando se intenta acceder al Principal pero no está establecido en el contexto."""
-    pass
 
-def get_current_principal() -> "Principal":
-    """Factory function que obtiene el Principal actual del ContextVar."""
-    principal = principal_ctx.get()
-    if principal is None:
-        raise PrincipalNotSetError("No hay un Principal establecido en el contexto actual")
-    return principal
 
+
+def get_current_principal() -> "Principal":    
+    return principal_ctx.get()    
 
 
 @component(provider_type=ProviderType.FACTORY,factory=get_current_principal)
 class Principal(BaseModel):
+    id:ID
     username:str
-    roles:List[str]    
+    email:str
+    role:str    
+    tenant:Optional[ID] = None
+
+
+
 
 def allow_anonymous(func: Callable):
     """Marca una ruta para permitir acceso sin autenticación."""

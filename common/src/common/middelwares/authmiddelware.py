@@ -1,8 +1,10 @@
-from starlette.types import ASGIApp,Scope,Receive,Send
+from starlette.types import ASGIApp, Scope, Receive, Send
 from fastapi import Request, HTTPException
-from common.security import Principal,principal_ctx
+from common.security import Principal, principal_ctx
 from common.context import context
 from common.http import jwt_token_var
+from common.util import get_id
+
 
 class AuthMiddleware:
     """Middleware para inyectar el Principal en el contexto."""
@@ -10,7 +12,7 @@ class AuthMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):        
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -39,11 +41,12 @@ class AuthMiddleware:
             auth_token = auth_header.split(" ", 1)[1]
 
         # Autenticar basado en el token
+        email = "pedrohurt@gmail.com"
         principal = None
-        if auth_token == "admin":
-            principal = Principal(username="admin", roles=["admin"])
-        elif auth_token == "user":
-            principal = Principal(username="user", roles=["user"])
+        if auth_token:
+            principal = Principal(
+                id=get_id(), username=auth_token, role=auth_token, email=email
+            )
 
         # Verificar si la ruta requiere autenticación
         route_key = (path, method)
@@ -59,6 +62,8 @@ class AuthMiddleware:
         jwt_token = jwt_token_var.set(auth_token)
         try:
             await self.app(scope, receive, send)
-        finally:            
+        except:
+            raise
+        finally:
             principal_ctx.reset(context_token)
             jwt_token_var.reset(jwt_token)
