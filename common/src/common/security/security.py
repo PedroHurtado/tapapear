@@ -52,7 +52,7 @@ def authorize(roles: Optional[list[str]] = None):
             principal = principal_ctx.get()
             if principal is None:
                 raise HTTPException(status_code=401, detail="Not authenticated")
-            if roles and not any(r in principal.roles for r in roles):
+            if roles and not any(r in principal.role for r in roles):
                 raise HTTPException(status_code=403, detail="Forbidden")
             return await func(*args, **kwargs)
 

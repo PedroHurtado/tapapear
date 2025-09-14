@@ -6,6 +6,9 @@ from common.errors import ErrorResponse
 from ._exception import ApplicationException
 from ._constants import UNPROCESSABLEENTITY, INTERNALSERVERERROR
 
+"""
+https://www.starlette.io/exceptions/
+"""
 
 def _create_error_response(
     status: int, 
@@ -35,8 +38,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApplicationException)
     async def application_exception_handler(
         request: Request, exc: ApplicationException
-    ) -> JSONResponse:
-        exc.from_request(request)
+    ) -> JSONResponse:        
         return _create_error_response(
             status=exc.status,
             error=exc.error,
@@ -60,7 +62,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(HTTPException)
     async def http_exception_handler(
         request: Request, exc: HTTPException
-    ) -> JSONResponse:
+    ) -> JSONResponse:        
         return _create_error_response(
             status=exc.status_code,
             error="HTTP Exception",
@@ -69,18 +71,36 @@ def setup_exception_handlers(app: FastAPI) -> None:
             path=str(request.url.path),
         )
 
+   
     @app.exception_handler(Exception)
     async def generic_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        # Control especial para HTTPException en middlewares
-        if isinstance(exc, HTTPException):
-            return await http_exception_handler(request, exc)
+        """
+        Handler genérico que captura excepciones de middlewares.
+        Usa pattern matching para delegar a los handlers específicos existentes.
+        """
         
-        return _create_error_response(
-            status=INTERNALSERVERERROR,
-            error="Internal Server Error",
-            exception_name=type(exc).__name__,
-            message=str(exc),
-            path=str(request.url.path),
-        )
+        match exc:
+            # HTTPException desde middlewares
+            case HTTPException():
+                return await http_exception_handler(request, exc)
+            
+            # ApplicationException desde middlewares  
+            case ApplicationException():
+                return await application_exception_handler(request, exc)
+            
+            # ValidationException desde middlewares
+            case ValidationException():
+                return await validation_exception_handler(request, exc)
+            
+            # Cualquier otra excepción - comportamiento original
+            case _:
+                return _create_error_response(
+                    status=INTERNALSERVERERROR,
+                    error="Internal Server Error",
+                    exception_name=type(exc).__name__,
+                    message=str(exc),
+                    path=str(request.url.path),
+                )
+    
