@@ -7,30 +7,33 @@ refactorizar custom_openapy con claude
 Ver errors middelware->Pasar a exception handler de fastapi
 
 Ver como devolver None en los controllers y que genere una respuesta
-vacia
+vacia(X)
 
 Estudio de Roles
-	Resolver si el el rol puede hacer la accion creo que eso implica que el rol
+	Resolver si el rol puede hacer la accion creo que eso implica que el rol
 	acumula todos los scopes
 
 caches de servidor
 
 logger
 	
-	OpenTelemetry
+	Ver loggin y exceptions
+
+	OpenTelemetry(x)
+			falta middelwares y controladores
+			refactorizar todo 
+			estudiar level para eliminar trazas
 
 	decorador de clases(x)
 	
-	ver httpx si se pone un nivel por encima para el modulo
+	ver httpx si se pone un nivel por encima para el modulo(x)
 
-	ver injeccion de dependencias me decanto por
+	ver injeccion de dependencias me decanto por(x)
 		object y que cada uno cree su logger
 
-	ver mediator y como montarlo
+	ver mediator y como montarlo(x)
 
-	ver repository y como montarlo
-
-	ver glogal handler exception y como montarlo
+	ver repository y como montarlo(x)	
 
 	ver metricas y como se enlazan con el tracer
 
