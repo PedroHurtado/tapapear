@@ -4,7 +4,7 @@ Firestore credentials
 
 refactorizar custom_openapy con claude  
 
-Ver errors middelware->Pasar a exception handler de fastapi
+Ver error middelware->Pasar a exception handler de fastapi
 
 Ver como devolver None en los controllers y que genere una respuesta
 vacia(X)
