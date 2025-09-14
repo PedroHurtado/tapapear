@@ -134,27 +134,32 @@ async def to_document(
 
 # --- MIXIN DE INSTRUMENTACIÓN ---
 
+
 class FirestoreTracingMixin:
-    def _start_span(self, operation: str, **attributes):
+    def _start_span(self, operation: str, *, db_statement: Optional[str] = None):
         span_name = f"infrastructure.firestore.{operation}.{self._collection_name}"
-        ctx_manager = tracer.start_as_current_span(span_name,record_exception=True)
+        ctx_manager = tracer.start_as_current_span(
+            span_name, kind=trace.SpanKind.CLIENT
+        )
         span = ctx_manager.__enter__()  # activa el contexto y devuelve el span real
+        span._ctx_manager = ctx_manager  # guardamos para cerrarlo en _end_span
 
-        # Guardamos el context manager para cerrarlo en _end_span
-        span._ctx_manager = ctx_manager  
-
-        # Atributos comunes
+        # --- Atributos comunes (OTel DB semantic conventions) ---
         span.set_attribute("db.system", "firestore")
-        span.set_attribute("db.collection", self._collection_name)
-        span.set_attribute("db.operation", operation)
         span.set_attribute("db.name", getattr(self._db, "_database", "(default)"))
-        span.set_attribute("repository.class", self.__class__.__name__)
-        span.set_attribute("repository.model", self._cls.__name__)
+        span.set_attribute("db.collection.name", self._collection_name)
+        span.set_attribute("db.operation", operation)
+        span.set_attribute(
+            "code.namespace",
+            f"{self.__class__.__module__}.{self.__class__.__name__}",
+        )
+        span.set_attribute(
+            "repository.model", f"{self.__class__.__module__}.{self._cls.__name__}"
+        )
 
-        # Atributos específicos
-        for k, v in attributes.items():
-            if v is not None:
-                span.set_attribute(k, v)
+        # --- Statement (pseudo-SQL) ---
+        if db_statement:
+            span.set_attribute("db.statement", db_statement)
 
         return span
 
@@ -163,21 +168,18 @@ class FirestoreTracingMixin:
             span.record_exception(error)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(error)))
         else:
-            span.set_status(trace.StatusCode.OK)
-        # Cerramos el context manager para liberar el span
+            span.set_status(trace.Status(trace.StatusCode.OK))
         span._ctx_manager.__exit__(None, None, None)
 
 
-
 # --- REPOSITORIO ---
+
 
 class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
     """Repository base que maneja automáticamente las transacciones"""
 
     def __init_subclass__(cls, **kwargs):
-        """Captura el tipo T cuando se define una subclase"""
         super().__init_subclass__(**kwargs)
-
         for base in cls.__orig_bases__:
             origin = get_origin(base)
             if origin is RepositoryFirestore:
@@ -225,11 +227,11 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
         document: T,
         transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> None:
-        span = self._start_span(
-            "create",
-            db_document_id=str(document.id),
-            transaction_active=transaction is not None,
+        statement = (
+            f"INSERT INTO {self._collection_name} (id={document.id}) "
+            f"[transaction={transaction is not None}]"
         )
+        span = self._start_span("insert", db_statement=statement)
         error: Optional[Exception] = None
         try:
             doc_ref = self.__get_collection().document(str(document.id))
@@ -240,7 +242,9 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
             else:
                 await doc_ref.create(data_with_meta)
 
-            logger.debug(f"📝 Documento creado en {self._collection_name}: {doc_ref.id}")
+            logger.debug(
+                f"📝 Documento creado en {self._collection_name}: {doc_ref.id}"
+            )
         except Exception as e:
             error = e
             raise
@@ -248,10 +252,8 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
             self._end_span(span, error)
 
     async def get(self, id: UUID, message: str = None) -> T:
-        span = self._start_span(
-            "get",
-            db_document_id=str(id),
-        )
+        statement = f"SELECT * FROM {self._collection_name} WHERE id={id}"
+        span = self._start_span("find", db_statement=statement)
         error: Optional[Exception] = None
         try:
             doc_ref = self.__get_collection().document(str(id))
@@ -283,11 +285,11 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
         document: T,
         transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> None:
-        span = self._start_span(
-            "update",
-            db_document_id=str(document.id),
-            transaction_active=transaction is not None,
+        statement = (
+            f"UPDATE {self._collection_name} SET ... WHERE id={document.id} "
+            f"[transaction={transaction is not None}]"
         )
+        span = self._start_span("update", db_statement=statement)
         error: Optional[Exception] = None
         try:
             doc_ref = self.__get_collection().document(str(document.id))
@@ -310,11 +312,11 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
     async def delete(
         self, doc: T, transaction: Optional[AsyncTransaction] = deps(AsyncTransaction)
     ) -> None:
-        span = self._start_span(
-            "delete",
-            db_document_id=str(doc.id),
-            transaction_active=transaction is not None,
+        statement = (
+            f"DELETE FROM {self._collection_name} WHERE id={doc.id} "
+            f"[transaction={transaction is not None}]"
         )
+        span = self._start_span("delete", db_statement=statement)
         error: Optional[Exception] = None
         try:
             doc_ref = self.__get_collection().document(str(doc.id))
@@ -338,16 +340,15 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
         limit: Optional[int] = None,
         transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> list[T]:
-        span = self._start_span(
-            "query",
-            db_query_field=field,
-            db_query_value=str(value) if isinstance(value, UUID) else value,
-            db_query_limit=limit,
-            transaction_active=transaction is not None,
+        _value = str(value) if isinstance(value, UUID) else value
+        statement = (
+            f"SELECT * FROM {self._collection_name} WHERE {field}={_value}"
+            + (f" LIMIT {limit}" if limit else "")
+            + f" [transaction={transaction is not None}]"
         )
+        span = self._start_span("find", db_statement=statement)
         error: Optional[Exception] = None
         try:
-            _value = str(value) if isinstance(value, UUID) else value
             query = self.__get_collection().where(field, "==", _value)
             if limit:
                 query = query.limit(limit)
@@ -370,7 +371,7 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
 
 
 @component
-@ordered(100)
+@ordered(1000)
 class TransactionPipeLine(CommandPipeLine):
     def __init__(self, db: AsyncClient, ctx_tx: AsyncTransactionContext):
         self._db = db
