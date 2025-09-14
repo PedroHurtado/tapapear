@@ -12,7 +12,7 @@ main_dir = Path(sys.argv[0]).resolve().parent
 def get_path(path: str | Path):
     return main_dir / path
 
-def get_id()->UUID:
+def get_id()->ID:
     return uuid4()
 
 def get_now()->datetime:

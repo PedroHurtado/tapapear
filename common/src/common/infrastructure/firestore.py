@@ -147,6 +147,7 @@ class FirestoreTracingMixin:
         # --- Atributos comunes (OTel DB semantic conventions) ---
         span.set_attribute("db.system", "firestore")
         span.set_attribute("db.name", getattr(self._db, "_database", "(default)"))
+        span.set_attribute("db.namespace", self._db.project)  # projectId de GCP
         span.set_attribute("db.collection.name", self._collection_name)
         span.set_attribute("db.operation", operation)
         span.set_attribute(

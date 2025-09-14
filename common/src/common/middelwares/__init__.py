@@ -7,4 +7,4 @@ SUPPORT_MIDDELWARES = {
     "AuthMiddleware": AuthMiddleware,
     "CORSMiddleware": CORSMiddleware,
 }
-__all__ = ["suport_middlewares" "ErrorMiddleware", "SUPPORT_MIDDELWARES"]
+__all__ = ["ErrorMiddleware", "SUPPORT_MIDDELWARES"]
