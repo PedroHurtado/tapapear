@@ -49,8 +49,6 @@ middlewares:
       #expose_headers: ["X-Total-Count"]
       max_age: 3600  
   - class: AuthMiddleware
-  - class: ErrorMiddleware
-
 
 development:  
   openapi: true  

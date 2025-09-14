@@ -1,49 +1,77 @@
+from typing import  Optional
+from ._constants import INTERNALSERVERERROR,NOTFOUND,CONFLICT,BADREQUEST,SERVICEUNAVAILABLE
+
+# ----------------- Literales de estado HTTP -----------------
+
+
+
+
+
+# ----------------- Excepciones Base -----------------
 
 class ApplicationException(Exception):
-     def __init__(self, message: str) -> None:
-          super.__init__(message)
+    """
+    Excepción base de la aplicación.
+    Contiene los campos necesarios para mapear a ErrorResponse.
+    """
+    def __init__(
+        self,
+        message: str,
+        status: int = INTERNALSERVERERROR,  # por defecto 500
+        error: Optional[str] = None,
+        cause: Optional[BaseException] = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status = status
+        self.error = error or self.__class__.__name__
+        self.cause = cause
+        self.exception = type(self).__name__
+        self.path: Optional[str] = None  # se rellena en el handler
+    
+
+
+# ----------------- Domain Exceptions -----------------
 
 class DomainException(ApplicationException):
-    """
-        De esta clase heredan:
+    """Excepciones de dominio (lógica de negocio)."""
 
-            ConflictDomainException->409
-
-            BadRequestDomainException->400
-
-            NotFoundDomainException->404
-
-    """
 
 class ConflictDomainException(DomainException):
-    """representa en la respuesta un 409"""
+    def __init__(self, message: str, cause: Optional[BaseException] = None):
+        super().__init__(message, status=CONFLICT, error="Conflict", cause=cause)
+
 
 class BadRequestDomainException(DomainException):
-    """representa en la respuesta un 400"""
+    def __init__(self, message: str, cause: Optional[BaseException] = None):
+        super().__init__(message, status=BADREQUEST, error="Bad Request", cause=cause)
+
 
 class NotFoundDomainException(DomainException):
-    """representa en la respuesta un 404"""
+    def __init__(self, message: str, cause: Optional[BaseException] = None):
+        super().__init__(message, status=NOTFOUND, error="Not Found", cause=cause)
+
+
+# ----------------- HTTP API Exceptions -----------------
 
 class HttpApiException(ApplicationException):
-    """
-        clase base para todas las exceptions HttpApiException
+    """Errores en llamadas a APIs externas."""
 
-        HttpApiRetryException      
-
-        HTTPApiStatusError
-
-    """
 
 class HttpApiRetryException(HttpApiException):
-    """
-            clase para todos los reintentos de  HttpApiException
-            puede tener un status code asociado
-    """
+    def __init__(self, message: str, cause: Optional[BaseException] = None):
+        super().__init__(message, status=SERVICEUNAVAILABLE, error="Service Unavailable", cause=cause)
 
-class HTTPApiStatusError(HttpApiException):
-    """
-        clase que representa el status code devuelto por 
-        httpx y que tiene un status code asociado
-    """
+
+class HttpApiStatusError(HttpApiException):
+    def __init__(self, message: str, status: int, cause: Optional[BaseException] = None):
+        super().__init__(message, status=status, error="Upstream API Error", cause=cause)
+
+
+# ----------------- Database Exceptions -----------------
+
+class DataBaseException(ApplicationException):
+    def __init__(self, message: str, status: int = INTERNALSERVERERROR, cause: Optional[BaseException] = None):
+        super().__init__(message, status=status, error="Database Error", cause=cause)
 
 

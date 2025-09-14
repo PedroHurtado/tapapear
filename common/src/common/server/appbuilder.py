@@ -10,6 +10,7 @@ from common.middelwares import SUPPORT_MIDDELWARES
 from .custom_fastapi import CustomFastApi
 from fastapi.responses import PlainTextResponse
 from fastapi.requests import Request
+from common.exceptions import setup_exception_handlers
 import uvicorn
 
 from contextlib import asynccontextmanager
@@ -94,16 +95,16 @@ class AppBuilder:
         for router in routers:
             try:
                 self._app.include_router(router)
-            except Exception as e:
-                raise e
+            except:
+                raise 
 
         # Registras modules en IOC
 
         modules = self._app.context.modules
         try:
             self._app.container.wire(modules)
-        except Exception as e:
-            raise e
+        except:
+            raise 
 
         print(f"  -  Routers registrados {len(routers)}")
         print(f"  -  DI registrados {len(modules)}")
@@ -118,6 +119,8 @@ class AppBuilder:
         self._setup_middelwares(self._app)
 
         self._app.exception_handlers.clear()
+
+        setup_exception_handlers(self._app)
 
         return self
 
