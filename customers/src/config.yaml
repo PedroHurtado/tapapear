@@ -9,16 +9,13 @@ openapi:
   summary: API de ejemplo
   description: Documentación de la API con configuración avanzada
 
-  tags:  
-    users:
-      prefix: /users
-      description: Operaciones relacionadas con usuarios
-    payments:
-      prefix: /payments
-      description: Gestión de pagos
+  tags:      
+    schedules:
+      prefix: /schedules
+      description: Schedule
     customers:
       prefix: /customers
-      description: Gestión de clientes
+      description: Customers
   servers:
     - url: http://localhost:8081
       description: Servidor de desarrollo

@@ -26,7 +26,7 @@ class FeatureModel(BaseModel):
         pretty_name = f"{feature_name}{cls.__name__}"
 
         # Lo ponemos en Pydantic (para schemas globales)
-        cls.model_config = {"title": pretty_name}
+        cls.model_config = {"title": pretty_name,"arbitrary_types_allowed":True}
 
         # ⚡ Y además reasignamos __name__ para FastAPI
         cls.__name__ = pretty_name
