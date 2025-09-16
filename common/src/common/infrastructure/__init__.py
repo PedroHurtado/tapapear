@@ -3,7 +3,8 @@ from .document import (
     id,    
     reference,
     Document,
-    Embeddable
+    Embeddable,
+    collection
 )
 from .firestore import(        
     DocumentNotFound,
@@ -24,6 +25,7 @@ from .repository import (
 __all__ = [    
     'id',    
     'reference',
+    'collection'
     'Document',
     'Embeddable',
     

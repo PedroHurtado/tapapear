@@ -1,0 +1,10 @@
+{
+    "id": "b6e95ae2-1aa9-43e3-960c-0dd6102f3010",
+    "order": {
+        "id": "users/b6e95ae2-1aa9-43e3-960c-0dd6102f3010/orders/ee74d1ef-6caa-4826-8dba-59ce9a6a9718",
+        "item": {
+            "id": "users/b6e95ae2-1aa9-43e3-960c-0dd6102f3010/orders/ee74d1ef-6caa-4826-8dba-59ce9a6a9718/items/5bf445e0-ae76-4939-864e-860ba4d82e38"
+        },
+        "article": "articles/d0f9c7c3-26b0-4d01-bc00-fc3652cb9aef"
+    }
+}

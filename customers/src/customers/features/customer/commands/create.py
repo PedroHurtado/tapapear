@@ -35,6 +35,7 @@ class Service(CommandHadler[Request]):
 
     async def handler(self, req: Request) -> Response:
 
+
         tax_type = TaxType("", "")
         customer = Customer.create(
             get_id(), req.name, "", "", "", get_now(), 200, tax_type, "52"

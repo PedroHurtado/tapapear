@@ -75,7 +75,10 @@ class AppBuilder:
 
         if self._config.env.firestore:
             from common.infrastructure import initialize_database
-            initialize_database(self._config.env.firestore.credential_path)    
+            initialize_database(                
+                self._config.env.firestore.credential_path,
+                self._config.env.firestore.database
+            )    
 
         """Construye la aplicación FastAPI."""
 

@@ -1,13 +1,39 @@
 from datetime import datetime, time, date
 
 from common.mediator import Mediator, Command, CommandHadler
-from common.ioc import component, inject, deps
+from common.ioc import component, inject, deps, ProviderType
 from common.openapi import FeatureModel
 from common.server import build_router,EMPTY
 from common.security import Principal, authorize
 from common.util import get_id
 from customers.domain.customer.schedule import Schedule
+from common.infrastructure import RepositoryFirestore
+from common.infrastructure import Document, collection, reference
+from common.util import ID, get_id
 
+
+class Article(Document): 
+    name:str
+
+class Item(Document): ...
+
+
+class Order(Document):  # antes Pedido
+    item: Item = collection()
+    name:str
+    article: Article = reference()
+
+@component(provider_type=ProviderType.OBJECT)
+class User(Document):  # antes Usuario
+    order: Order = collection()
+
+article = Article(id=get_id(),name="tomate")
+# Crear instancias
+order = Order(id=get_id(), article=article, item=Item(id=get_id()), name="Jose Manuel")
+user = User(id=get_id(), order=order)
+
+@component
+class Repository(RepositoryFirestore[User]):...
 
 router = build_router("schedules")
 
@@ -66,12 +92,17 @@ class Response(FeatureModel):
 
 @component
 class Service(CommandHadler[Request]):
+    def __init__(self, repository:Repository):
+        self._repository = repository
+        pass
     @inject
     async def handler(
         self, command: Request, principal: Principal = deps(Principal)
     ) -> Response:
         
-        schedule = Schedule.create(
+        
+        await self._repository.create(user)
+        schedule = Schedule.create( 
             get_id(),
             command.time_format,
             command.allow_reservations,

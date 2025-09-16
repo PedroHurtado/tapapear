@@ -10,6 +10,8 @@ from common.util import get_path
 from typing import (
     Any,
     Callable,
+    List,
+    Tuple,
     TypeVar,
     ParamSpec,
     Optional,
@@ -23,7 +25,7 @@ from typing import (
 )
 from common.ioc import component, ProviderType, inject, deps
 from common.mediator import ordered, CommandPipeLine, PipelineContext
-from .document import Document, DocumentReference, MixinSerializer
+from .document import Document, DocumentReference, CollectionReference, MixinSerializer
 
 # OpenTelemetry
 from opentelemetry import trace
@@ -64,7 +66,7 @@ def get_db() -> AsyncClient:
     return db
 
 
-def get_document(path: str) -> AsyncDocumentReference:
+def get_document(path: str) -> AsyncDocumentReference:    
     return get_db().document(path)
 
 
@@ -79,9 +81,126 @@ def initialize_database(
 ):
     global db
     credentials_path = get_path(credentials_path)
+    
     cred = Credentials.from_service_account_file(credentials_path)
     db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
 
+def generate_firestore_commands(data: Dict[str, Any], db) -> List[Tuple[AsyncDocumentReference, Dict[str, Any]]]:
+    """
+    Genera una lista de comandos Firestore ordenados por nivel jerárquico.
+    Devuelve tuplas de (doc_ref, data) listas para crear con transaction.create() o doc_ref.create()
+    """
+    commands = []
+    
+    def extract_documents(obj: Any, current_level: int = 0) -> None:
+        """Extrae documentos recursivamente y los ordena por nivel"""
+        
+        if isinstance(obj, CollectionReference):
+            # Extraer el path y construir el document reference
+            path_parts = obj.path.split('/')
+            
+            # Construir el doc_ref usando db.collection().document() por niveles
+            doc_ref = db
+            for i in range(0, len(path_parts), 2):
+                if i < len(path_parts):
+                    doc_ref = doc_ref.collection(path_parts[i])
+                if i + 1 < len(path_parts):
+                    doc_ref = doc_ref.document(path_parts[i + 1])
+            
+            # Obtener los datos del objeto (excluyendo subcollections)
+            doc_data = {}
+            for key, value in obj.__dict__.items():
+                if key != 'path':  # Excluir el path interno
+                    if isinstance(value, (CollectionReference, DocumentReference)):
+                        # Las subcollections y referencias se procesan por separado
+                        continue
+                    else:
+                        doc_data[key] = value
+            
+            # Agregar el comando con su nivel jerárquico
+            level = len(path_parts) // 2
+            commands.append((level, doc_ref, doc_data))
+            
+            # Buscar subcollections anidadas en los datos originales
+            # (esto requeriría acceso a los datos originales que contiene la CollectionReference)
+            
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                extract_documents(value, current_level)
+                
+        elif isinstance(obj, list):
+            for item in obj:
+                extract_documents(item, current_level)
+    
+    # Extraer todos los documentos
+    extract_documents(data)
+    
+    # Ordenar por nivel (padres primero, luego hijos)
+    commands.sort(key=lambda x: x[0])
+    
+    # Devolver solo (doc_ref, data) sin el nivel
+    return [(doc_ref, data) for level, doc_ref, data in commands]
+
+
+def generate_firestore_commands_v2(data: Dict[str, Any], db) -> List[Tuple[AsyncDocumentReference, Dict[str, Any]]]:
+    """
+    Versión alternativa que maneja mejor los datos anidados
+    """
+    commands = []
+    processed_paths = set()
+    
+    def process_item(obj: Any, parent_data: Dict = None) -> Dict[str, Any]:
+        """Procesa un item y extrae sus CollectionReferences"""
+        clean_data = {}
+        
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if isinstance(value, CollectionReference):
+                    # Crear el comando para esta subcollection
+                    if value.path not in processed_paths:
+                        processed_paths.add(value.path)
+                        
+                        # Construir doc_ref por niveles
+                        path_parts = value.path.split('/')
+                        doc_ref = db
+                        for i in range(0, len(path_parts), 2):
+                            if i < len(path_parts):
+                                doc_ref = doc_ref.collection(path_parts[i])
+                            if i + 1 < len(path_parts):
+                                doc_ref = doc_ref.document(path_parts[i + 1])
+                        
+                        # Extraer datos de la CollectionReference (necesitarías una forma de acceder a estos datos)
+                        # Por ahora, datos vacíos - esto necesita ser ajustado según tu implementación
+                        subcollection_data = getattr(value, 'data', {})
+                        
+                        level = len(path_parts) // 2
+                        commands.append((level, doc_ref, subcollection_data))
+                    
+                    # No incluir la CollectionReference en los datos del padre
+                    continue
+                    
+                elif isinstance(value, DocumentReference):
+                    # Convertir DocumentReference si es necesario
+                    clean_data[key] = get_document(value.path)
+                    
+                else:
+                    # Procesar recursivamente
+                    clean_data[key] = process_item(value)
+                    
+        elif isinstance(obj, list):
+            return [process_item(item) for item in obj]
+        else:
+            return obj
+            
+        return clean_data
+    
+    # Procesar los datos principales
+    main_data = process_item(data)
+    
+    # Ordenar comandos por nivel
+    commands.sort(key=lambda x: x[0])
+    
+    return [(doc_ref, data) for level, doc_ref, data in commands]
 
 def convert_document_references(data: Any) -> Any:
     """
