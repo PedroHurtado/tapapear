@@ -109,7 +109,7 @@ class MixinSerializer(BaseModel):
         # Construir el path base para esta subcollection
         base_path = self.__build_collection_path(collection_expression, parent_path)
         
-        if isinstance(value, list):
+        if isinstance(value, (list,set)):
             return [self.__serialize_subcollection_item(item, base_path) for item in value]
         else:
             return self.__serialize_subcollection_item(value, base_path)

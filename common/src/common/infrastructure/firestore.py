@@ -496,7 +496,8 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
         )
         span = self._start_span("find", db_statement=statement)
         error: Optional[Exception] = None
-        try:
+        try:       
+            
             query = self.__get_collection().where(field, "==", _value)
             if limit:
                 query = query.limit(limit)

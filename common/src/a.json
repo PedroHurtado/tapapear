@@ -1,10 +1,34 @@
 {
-    "id": "b6e95ae2-1aa9-43e3-960c-0dd6102f3010",
+    "id": "2086c155-9582-4670-a17e-f7fa08f0886d",
     "order": {
-        "id": "users/b6e95ae2-1aa9-43e3-960c-0dd6102f3010/orders/ee74d1ef-6caa-4826-8dba-59ce9a6a9718",
-        "item": {
-            "id": "users/b6e95ae2-1aa9-43e3-960c-0dd6102f3010/orders/ee74d1ef-6caa-4826-8dba-59ce9a6a9718/items/5bf445e0-ae76-4939-864e-860ba4d82e38"
+        "id": {
+            "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57"
         },
-        "article": "articles/d0f9c7c3-26b0-4d01-bc00-fc3652cb9aef"
+        "items": [
+            {
+                "id": {
+                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/7dd4c85e-893e-4e17-bcd4-23eb1dd067db"
+                }
+            },
+            {
+                "id": {
+                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/a88685e9-c102-4b02-89da-78879acc535c"
+                }
+            },
+            {
+                "id": {
+                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/23f2d60c-23c7-45f2-8dab-9568a11e8f07"
+                }
+            },
+            {
+                "id": {
+                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/46e43c32-be75-4405-823b-90ec722a1dc0"
+                }
+            }
+        ],
+        "name": "Jose Manuel",
+        "article": {
+            "path": "articles/0f5d3240-d0b5-4dd7-975a-1209c91546a2"
+        }
     }
 }
