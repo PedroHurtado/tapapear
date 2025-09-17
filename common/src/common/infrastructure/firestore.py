@@ -85,154 +85,194 @@ def initialize_database(
     cred = Credentials.from_service_account_file(credentials_path)
     db = AsyncClient(project=cred.project_id, credentials=cred, database=database)
 
-def generate_firestore_commands(data: Dict[str, Any], db) -> List[Tuple[AsyncDocumentReference, Dict[str, Any]]]:
+
+
+def generate_firestore_commands(data: dict, db):
     """
-    Genera una lista de comandos Firestore ordenados por nivel jerárquico.
-    Devuelve tuplas de (doc_ref, data) listas para crear con transaction.create() o doc_ref.create()
+    Extrae CollectionReference del JSON y genera comandos Firestore ordenados por nivel jerárquico.
     """
     commands = []
     
-    def extract_documents(obj: Any, current_level: int = 0) -> None:
-        """Extrae documentos recursivamente y los ordena por nivel"""
+    def create_doc_ref_from_path(path: str):
+        """Crea AsyncDocumentReference usando db.collection().document() por niveles"""
+        path_parts = path.split('/')
+        doc_ref = db
         
-        if isinstance(obj, CollectionReference):
-            # Extraer el path y construir el document reference
-            path_parts = obj.path.split('/')
-            
-            # Construir el doc_ref usando db.collection().document() por niveles
-            doc_ref = db
-            for i in range(0, len(path_parts), 2):
-                if i < len(path_parts):
-                    doc_ref = doc_ref.collection(path_parts[i])
-                if i + 1 < len(path_parts):
-                    doc_ref = doc_ref.document(path_parts[i + 1])
-            
-            # Obtener los datos del objeto (excluyendo subcollections)
-            doc_data = {}
-            for key, value in obj.__dict__.items():
-                if key != 'path':  # Excluir el path interno
-                    if isinstance(value, (CollectionReference, DocumentReference)):
-                        # Las subcollections y referencias se procesan por separado
-                        continue
-                    else:
-                        doc_data[key] = value
-            
-            # Agregar el comando con su nivel jerárquico
-            level = len(path_parts) // 2
-            commands.append((level, doc_ref, doc_data))
-            
-            # Buscar subcollections anidadas en los datos originales
-            # (esto requeriría acceso a los datos originales que contiene la CollectionReference)
-            
-        elif isinstance(obj, dict):
-            for key, value in obj.items():
-                extract_documents(value, current_level)
-                
-        elif isinstance(obj, list):
-            for item in obj:
-                extract_documents(item, current_level)
+        for i in range(0, len(path_parts), 2):
+            if i < len(path_parts):
+                doc_ref = doc_ref.collection(path_parts[i])
+            if i + 1 < len(path_parts):
+                doc_ref = doc_ref.document(path_parts[i + 1])
+        
+        return doc_ref
     
-    # Extraer todos los documentos
-    extract_documents(data)
-    
-    # Ordenar por nivel (padres primero, luego hijos)
-    commands.sort(key=lambda x: x[0])
-    
-    # Devolver solo (doc_ref, data) sin el nivel
-    return [(doc_ref, data) for level, doc_ref, data in commands]
-
-
-def generate_firestore_commands_v2(data: Dict[str, Any], db) -> List[Tuple[AsyncDocumentReference, Dict[str, Any]]]:
-    """
-    Versión alternativa que maneja mejor los datos anidados
-    """
-    commands = []
-    processed_paths = set()
-    
-    def process_item(obj: Any, parent_data: Dict = None) -> Dict[str, Any]:
-        """Procesa un item y extrae sus CollectionReferences"""
-        clean_data = {}
+    def process_object(obj):
+        """Procesa recursivamente el objeto buscando CollectionReference"""
         
         if isinstance(obj, dict):
-            for key, value in obj.items():
-                if isinstance(value, CollectionReference):
-                    # Crear el comando para esta subcollection
-                    if value.path not in processed_paths:
-                        processed_paths.add(value.path)
-                        
-                        # Construir doc_ref por niveles
-                        path_parts = value.path.split('/')
-                        doc_ref = db
-                        for i in range(0, len(path_parts), 2):
-                            if i < len(path_parts):
-                                doc_ref = doc_ref.collection(path_parts[i])
-                            if i + 1 < len(path_parts):
-                                doc_ref = doc_ref.document(path_parts[i + 1])
-                        
-                        # Extraer datos de la CollectionReference (necesitarías una forma de acceder a estos datos)
-                        # Por ahora, datos vacíos - esto necesita ser ajustado según tu implementación
-                        subcollection_data = getattr(value, 'data', {})
-                        
-                        level = len(path_parts) // 2
-                        commands.append((level, doc_ref, subcollection_data))
-                    
-                    # No incluir la CollectionReference en los datos del padre
-                    continue
-                    
-                elif isinstance(value, DocumentReference):
-                    # Convertir DocumentReference si es necesario
-                    clean_data[key] = get_document(value.path)
-                    
-                else:
-                    # Procesar recursivamente
-                    clean_data[key] = process_item(value)
-                    
-        elif isinstance(obj, list):
-            return [process_item(item) for item in obj]
-        else:
-            return obj
+            # Verificar si este dict representa un documento con CollectionReference como id
+            if 'id' in obj and isinstance(obj['id'], CollectionReference):
+                collection_ref = obj['id']
+                
+                # Crear el documento de Firestore
+                doc_ref = create_doc_ref_from_path(collection_ref.path)
+                
+                # Extraer los datos (todo excepto el 'id')
+                doc_data = {}
+                for key, value in obj.items():
+                    if key == 'id':
+                        continue  # Skip CollectionReference id
+                    else:
+                        # Procesar recursivamente para limpiar subcollections anidadas
+                        processed_value = process_object(value)
+                        if processed_value is not None:
+                            doc_data[key] = processed_value
+                
+                # Convertir DocumentReference a AsyncDocumentReference en los datos
+                doc_data = convert_document_references(doc_data)
+                
+                # Calcular nivel jerárquico
+                level = len(collection_ref.path.split('/')) // 2
+                commands.append((level, doc_ref, doc_data))
+                
+                # Retornar None para indicar que este nivel se procesó como subcollection
+                return None
             
-        return clean_data
+            else:
+                # Dict normal, procesar recursivamente
+                result = {}
+                for key, value in obj.items():
+                    processed_value = process_object(value)
+                    if processed_value is not None:
+                        result[key] = processed_value
+                return result
+        
+        elif isinstance(obj, (list, set)):
+            # Procesar listas/sets
+            result = []
+            for item in obj:
+                processed_item = process_object(item)
+                if processed_item is not None:
+                    result.append(processed_item)
+            
+            return set(result) if isinstance(obj, set) else result
+        
+        else:
+            # Tipos primitivos
+            return obj
     
-    # Procesar los datos principales
-    main_data = process_item(data)
+    # Procesar todos los datos
+    process_object(data)
     
-    # Ordenar comandos por nivel
+    # Ordenar comandos por nivel jerárquico
     commands.sort(key=lambda x: x[0])
     
-    return [(doc_ref, data) for level, doc_ref, data in commands]
-
-def convert_document_references(data: Any) -> Any:
-    """
-    Función recursiva que convierte instancias de DocumentReference a AsyncDocumentReference
-    en cualquier parte de la estructura de datos, usando pattern matching (Python 3.10+).
-    """
-    match data:
-        case DocumentReference():
-            return get_document(data.path)
-        case dict():
-            return {
-                key: convert_document_references(value) for key, value in data.items()
-            }
-        case list():
-            return [convert_document_references(item) for item in data]
-        case tuple():
-            return tuple(convert_document_references(item) for item in data)
-        case set():
-            return {convert_document_references(item) for item in data}
-        case UUID():
-            return str(data)
-        case _:
-            return data
+    return [(doc_ref, doc_data) for level, doc_ref, doc_data in commands]
 
 
-def to_firestore(model: MixinSerializer) -> Dict[str, Any]:
+def convert_document_references(data):
     """
-    Convierte un modelo Pydantic a un diccionario listo para Firestore,
-    reemplazando DocumentReference por AsyncDocumentReference.
+    Convierte DocumentReference a AsyncDocumentReference, ignora CollectionReference
+    """
+    if isinstance(data, DocumentReference):
+        return get_document(data.path)
+    elif isinstance(data, CollectionReference):
+        # Las CollectionReference se ignoran (ya procesadas por generate_firestore_commands)
+        return None
+    elif isinstance(data, dict):
+        result = {}
+        for key, value in data.items():
+            converted = convert_document_references(value)
+            if converted is not None:
+                result[key] = converted
+        return result
+    elif isinstance(data, (list, tuple)):
+        result = []
+        for item in data:
+            converted = convert_document_references(item)
+            if converted is not None:
+                result.append(converted)
+        return tuple(result) if isinstance(data, tuple) else result
+    elif isinstance(data, set):
+        result = set()
+        for item in data:
+            converted = convert_document_references(item)
+            if converted is not None:
+                result.add(converted)
+        return result
+    elif isinstance(data, UUID):
+        return str(data)
+    else:
+        return data
+
+
+def to_firestore(model):
+    """
+    Convierte un modelo Pydantic a un diccionario listo para Firestore.
+    Filtra las subcollections que se procesan por separado.
     """
     model_dict = model.model_dump(context={"is_root": True})
     return convert_document_references(model_dict)
+
+
+def remove_subcollections(data):
+    """
+    Remueve objetos que contienen CollectionReference como id del diccionario principal
+    """
+    if isinstance(data, dict):
+        if 'id' in data and isinstance(data['id'], CollectionReference):
+            # Este es un documento que debe ir en subcollection, no en el documento principal
+            return None
+        
+        result = {}
+        for key, value in data.items():
+            cleaned_value = remove_subcollections(value)
+            if cleaned_value is not None:
+                result[key] = cleaned_value
+        return result
+    
+    elif isinstance(data, (list, set)):
+        result = []
+        for item in data:
+            cleaned_item = remove_subcollections(item)
+            if cleaned_item is not None:
+                result.append(cleaned_item)
+        return set(result) if isinstance(data, set) else result
+    
+    else:
+        return data
+
+
+def to_firestore_main_document(model):
+    """
+    Convierte solo el documento principal (sin subcollections) para Firestore
+    """
+    model_dict = model.model_dump(context={"is_root": True})
+    # Remover subcollections
+    cleaned_dict = remove_subcollections(model_dict)
+    # Convertir referencias normales
+    return convert_document_references(cleaned_dict)
+
+
+def prepare_all_firestore_commands(document, collection_ref, db):
+    """
+    Prepara TODOS los comandos Firestore (documento principal + subcollections)
+    ordenados por nivel jerárquico
+    """
+    # Obtener datos serializados
+    model_dict = document.model_dump(context={"is_root": True})
+    
+    # Extraer comandos para subcollections
+    subcollection_commands = generate_firestore_commands(model_dict, db)
+    
+    # Preparar documento principal (nivel 0)
+    main_doc_ref = collection_ref.document(str(document.id))
+    main_data = to_firestore_main_document(document)
+    
+    # Combinar: principal primero, luego subcollections (ya están ordenadas por nivel)
+    all_commands = [(main_doc_ref, main_data)] + subcollection_commands
+    
+    return all_commands
 
 
 async def to_document(
@@ -343,9 +383,9 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
 
     @inject
     async def create(
-        self,
-        document: T,
-        transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
+    self,
+    document: T,
+    transaction: Optional[AsyncTransaction] = deps(AsyncTransaction),
     ) -> None:
         statement = (
             f"INSERT INTO {self._collection_name} (id={document.id}) "
@@ -354,33 +394,21 @@ class RepositoryFirestore(FirestoreTracingMixin, Generic[T]):
         span = self._start_span("insert", db_statement=statement)
         error: Optional[Exception] = None
         try:
-            doc_ref = self.__get_collection().document(str(document.id))
-            data_with_meta = to_firestore(document)
-
+            # Preparar todos los comandos (principal + subcollections)
+            all_commands = prepare_all_firestore_commands(document, self.__get_collection(), self._db)
+            
+            # Crear todos los documentos en orden
             if transaction is not None:
-                transaction.create(doc_ref, data_with_meta)
+                for doc_ref, data in all_commands:
+                    transaction.create(doc_ref, data)
             else:
-                await doc_ref.create(data_with_meta)
+                for doc_ref, data in all_commands:
+                    await doc_ref.create(data)
 
             logger.debug(
-                f"📝 Documento creado en {self._collection_name}: {doc_ref.id}"
+                f"📝 Documentos creados en {self._collection_name}: {document.id} "
+                f"+ {len(all_commands)-1} subcollections"
             )
-        except Exception as e:
-            error = e
-            raise
-        finally:
-            self._end_span(span, error)
-
-    async def get(self, id: UUID, message: str = None) -> T:
-        statement = f"SELECT * FROM {self._collection_name} WHERE id={id}"
-        span = self._start_span("find", db_statement=statement)
-        error: Optional[Exception] = None
-        try:
-            doc_ref = self.__get_collection().document(str(id))
-            error_obj = DocumentNotFound(id, self._cls.__name__, message)
-            data = await RepositoryFirestore.__get(doc_ref, error_obj)
-            processed_data = await to_document(data, resolve_document_reference)
-            return self._cls(**processed_data)
         except Exception as e:
             error = e
             raise
