@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import Any, Annotated, get_args, get_origin
-
+from common.util import get_id
 from pydantic import (
     BaseModel,
     Field,
@@ -17,7 +17,7 @@ from common.inflect import plural
 
 
 def id():
-    return Field(metadata={"id": True})
+    return Field(metadata={"id": True}, default_factory=lambda:get_id())
 
 
 def reference(collection_name: str = None):
@@ -258,7 +258,7 @@ class MixinSerializer(BaseModel):
         doc_id = str(value.id) if isinstance(value.id, UUID) else value.id
         return DocumentReference(path=f"{collection_name}/{doc_id}")
 
-    model_config = ConfigDict(frozen=True)
+    #model_config = ConfigDict(frozen=True)
 
 
 class Document(MixinSerializer):

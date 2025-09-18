@@ -58,54 +58,6 @@ class DatabaseDialect(ABC):
         """Ejecuta los comandos abstractos en la base de datos específica"""
         pass
 
-
-class FirestoreDialect(DatabaseDialect):
-    """Dialecto para Google Firestore"""
-    
-    def execute_commands(self, commands: List[AbstractCommand]) -> None:
-        """Ejecuta comandos en Firestore"""
-        for command in commands:
-            doc_ref = self._create_doc_ref_from_path(command.entity_path)
-            firestore_data = self._convert_to_firestore_data(command.data)
-            
-            if command.operation == "CREATE":
-                if self.transaction:
-                    self.transaction.create(doc_ref, firestore_data)
-                else:
-                    # Para async, necesitarías await aquí
-                    doc_ref.create(firestore_data)
-            
-            elif command.operation == "UPDATE":
-                if self.transaction:
-                    self.transaction.update(doc_ref, firestore_data)
-                else:
-                    doc_ref.update(firestore_data)
-            
-            elif command.operation == "DELETE":
-                if self.transaction:
-                    self.transaction.delete(doc_ref)
-                else:
-                    doc_ref.delete()
-    
-    def _create_doc_ref_from_path(self, path: str):
-        """Crea AsyncDocumentReference desde path usando db.collection().document()"""
-        path_parts = path.split('/')
-        doc_ref = self.db
-        
-        for i in range(0, len(path_parts), 2):
-            if i < len(path_parts):
-                doc_ref = doc_ref.collection(path_parts[i])
-            if i + 1 < len(path_parts):
-                doc_ref = doc_ref.document(path_parts[i + 1])
-        
-        return doc_ref
-    
-    def _convert_to_firestore_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Convierte datos abstractos a formato Firestore"""
-        # Aquí aplicarías convert_document_references si fuera necesario
-        return data
-
-
 # ==================== CHANGE TRACKER ====================
 
 class ChangeTracker:
@@ -387,6 +339,56 @@ class ChangeTracker:
         return diff_path.replace("root", "").replace("['", "/").replace("']", "").strip("/")
 
 
+
+
+class FirestoreDialect(DatabaseDialect):
+    """Dialecto para Google Firestore"""
+    
+    def execute_commands(self, commands: List[AbstractCommand]) -> None:
+        """Ejecuta comandos en Firestore"""
+        for command in commands:
+            doc_ref = self._create_doc_ref_from_path(command.entity_path)
+            firestore_data = self._convert_to_firestore_data(command.data)
+            
+            if command.operation == "CREATE":
+                if self.transaction:
+                    self.transaction.create(doc_ref, firestore_data)
+                else:
+                    # Para async, necesitarías await aquí
+                    doc_ref.create(firestore_data)
+            
+            elif command.operation == "UPDATE":
+                if self.transaction:
+                    self.transaction.update(doc_ref, firestore_data)
+                else:
+                    doc_ref.update(firestore_data)
+            
+            elif command.operation == "DELETE":
+                if self.transaction:
+                    self.transaction.delete(doc_ref)
+                else:
+                    doc_ref.delete()
+    
+    def _create_doc_ref_from_path(self, path: str):
+        """Crea AsyncDocumentReference desde path usando db.collection().document()"""
+        path_parts = path.split('/')
+        doc_ref = self.db
+        
+        for i in range(0, len(path_parts), 2):
+            if i < len(path_parts):
+                doc_ref = doc_ref.collection(path_parts[i])
+            if i + 1 < len(path_parts):
+                doc_ref = doc_ref.document(path_parts[i + 1])
+        
+        return doc_ref
+    
+    def _convert_to_firestore_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Convierte datos abstractos a formato Firestore"""
+        # Aquí aplicarías convert_document_references si fuera necesario
+        return data
+
+
+
 # ==================== CONTEXT HELPERS ====================
 
 _change_tracker: ContextVar[Optional[ChangeTracker]] = ContextVar('change_tracker', default=None)
@@ -583,6 +585,8 @@ class VerboseConsoleDialect(ConsoleDialect):
 # ==================== PUBLIC API ====================
 
 __all__ = [
+    'ConsoleDialect',
+    'VerboseConsoleDialect',
     'ChangeType',
     'TrackedEntity', 
     'AbstractCommand',
