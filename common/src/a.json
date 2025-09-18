@@ -1,34 +1,130 @@
 {
-    "id": "2086c155-9582-4670-a17e-f7fa08f0886d",
-    "order": {
-        "id": {
-            "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57"
-        },
-        "items": [
-            {
-                "id": {
-                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/7dd4c85e-893e-4e17-bcd4-23eb1dd067db"
-                }
+    "id": "9015e0c5-d70b-4566-92e3-dc70517a437e",
+    "order": [
+        {
+            "id": {
+                "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84"
             },
-            {
-                "id": {
-                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/a88685e9-c102-4b02-89da-78879acc535c"
+            "items_list_by_id": [
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/3cdcef25-d689-4538-9698-5499918df153"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/30503100-f455-486f-8404-691768d55dae"
+                    }
                 }
-            },
-            {
-                "id": {
-                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/23f2d60c-23c7-45f2-8dab-9568a11e8f07"
+            ],
+            "items_list_collection": [
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_list_collections/348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_list_collections/c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_list_collections/3cdcef25-d689-4538-9698-5499918df153"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_list_collections/30503100-f455-486f-8404-691768d55dae"
+                    }
                 }
-            },
-            {
-                "id": {
-                    "path": "users/2086c155-9582-4670-a17e-f7fa08f0886d/orders/83ac4fdb-c66e-4a8f-be92-45684f22bb57/item/46e43c32-be75-4405-823b-90ec722a1dc0"
+            ],
+            "items_list": [
+                {
+                    "id": "348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                },
+                {
+                    "id": "c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                },
+                {
+                    "id": "3cdcef25-d689-4538-9698-5499918df153"
+                },
+                {
+                    "id": "30503100-f455-486f-8404-691768d55dae"
                 }
+            ],
+            "items_set_by_id": [
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/30503100-f455-486f-8404-691768d55dae"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items/3cdcef25-d689-4538-9698-5499918df153"
+                    }
+                }
+            ],
+            "items_set_collection": [
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_set_collections/348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_set_collections/c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_set_collections/30503100-f455-486f-8404-691768d55dae"
+                    }
+                },
+                {
+                    "id": {
+                        "path": "users/9015e0c5-d70b-4566-92e3-dc70517a437e/orders/000b068f-24d8-4543-87ba-9a9f89b5cc84/items_set_collections/3cdcef25-d689-4538-9698-5499918df153"
+                    }
+                }
+            ],
+            "items_set": [
+                {
+                    "id": "348c9f5e-d1ee-41ae-903c-bcbe032f6eaf"
+                },
+                {
+                    "id": "c6a49878-99ad-4868-9ec1-28d478bccc7b"
+                },
+                {
+                    "id": "30503100-f455-486f-8404-691768d55dae"
+                },
+                {
+                    "id": "3cdcef25-d689-4538-9698-5499918df153"
+                }
+            ],
+            "name": "Jose Manuel",
+            "article": {
+                "path": "articles/6bdcf259-fdb6-417a-b004-83b55dea2599"
             }
-        ],
-        "name": "Jose Manuel",
-        "article": {
-            "path": "articles/0f5d3240-d0b5-4dd7-975a-1209c91546a2"
         }
-    }
+    ]
 }

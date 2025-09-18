@@ -25,7 +25,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi (>=0.57b0,<0.58)",    
     "opentelemetry-instrumentation-httpx (>=0.57b0,<0.58)",    
     "structlog (>=25.4.0,<26.0.0)",    
-    "opentelemetry-instrumentation-logging (>=0.57b0,<0.58)",
+    "opentelemetry-instrumentation-logging (>=0.57b0,<0.58)",    
+    "deepdiff (>=8.6.1,<9.0.0)",
 ]
 
 [tool.poetry]
