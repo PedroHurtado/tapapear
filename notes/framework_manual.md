@@ -908,18 +908,24 @@ tracer_provider.add_span_processor(
 ### 1. Estructura del Feature
 
 ```
-features/users/
-├── commands/
-│   ├── __init__.py
-│   └── create_user.py
-├── queries/
-│   ├── __init__.py
-│   └── get_user.py
+features/{feature_name}/
+├── __init__.py
 ├── models/
+│   └── __init__.py
+├── commands/
+│   └── __init__.py
+├── queries/
+│   └── __init__.py
+├── events/
+│   └── __init__.py
+├── infrastructure/
 │   ├── __init__.py
-│   ├── user.py
-│   └── user_document.py
-└── __init__.py
+│   ├── repositories/
+│   │   └── __init__.py
+│   └── external/
+│       └── __init__.py
+└── tests/
+    └── __init__.py
 ```
 
 ### 2. Domain Model
