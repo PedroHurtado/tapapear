@@ -4,7 +4,8 @@ from .document import (
     reference,
     Document,
     Embeddable,
-    collection
+    collection,
+    geopoint
 )
 from .firestore import(        
     DocumentNotFound,
@@ -25,7 +26,8 @@ from .repository import (
 __all__ = [    
     'id',    
     'reference',
-    'collection'
+    'collection',
+    'geopoint',
     'Document',
     'Embeddable',
     
