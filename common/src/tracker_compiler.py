@@ -249,6 +249,12 @@ class EntityRegistry:
 # Registry global (singleton)
 _global_registry = EntityRegistry()
 
+def get_entity_registry() -> EntityRegistry:
+    """
+    Obtiene el registry global de entidades.
+    """
+    return _global_registry
+
 def entity(cls: Type[Document]) -> Type[Document]:
     """
     Decorador para registrar automáticamente una entidad en el registry.
@@ -262,11 +268,7 @@ def entity(cls: Type[Document]) -> Type[Document]:
     _global_registry.register_entity(cls)
     return cls
 
-def get_entity_registry() -> EntityRegistry:
-    """
-    Obtiene el registry global de entidades.
-    """
-    return _global_registry
+
 
 
 # ==================== EJEMPLOS DE USO ====================
