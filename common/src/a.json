@@ -1,6 +1,6 @@
 {
   "id": {
-    "path": "1fbac6df-5382-4a1f-94cb-f1d3976dedc2"
+    "path": "337dc8d1-4299-46c2-b765-54b10224b790"
   },
   "name": "TechStore Madrid",
   "location": {
@@ -10,21 +10,21 @@
   "products": [
     {
       "id": {
-        "path": "stores/1fbac6df-5382-4a1f-94cb-f1d3976dedc2/products/4595b2d2-432b-4f12-ae91-1df1e9f44354"
+        "path": "stores/337dc8d1-4299-46c2-b765-54b10224b790/products/f9fc7f8a-aaa1-485f-b602-f0012a6c1c79"
       },
       "name": "Gaming Laptop",
       "price": 1299.99,
       "category": {
-        "path": "categories/59cd3122-976d-4ae4-80bd-3d41a32df408"
+        "path": "categories/2382a406-bf05-4d26-bc87-03709d11a22e"
       },
       "tags": [
         {
-          "id": "e7190bfa-c54c-4b0a-b320-6e50dbc1e3d9",
+          "id": "ded16382-1aaa-47a7-9093-b346cdfb17f5",
           "name": "New",
           "color": "blue"
         },
         {
-          "id": "9ce8798d-d62b-4d9e-bc7a-743adbb0eab1",
+          "id": "1e6af991-a35e-45f3-a94c-8f92b8986293",
           "name": "Premium",
           "color": "gold"
         }
@@ -37,16 +37,16 @@
     },
     {
       "id": {
-        "path": "stores/1fbac6df-5382-4a1f-94cb-f1d3976dedc2/products/6b3e3f15-1b99-493e-bef5-12e83b04b63c"
+        "path": "stores/337dc8d1-4299-46c2-b765-54b10224b790/products/66cf7a06-9518-4896-8098-0905550b115f"
       },
       "name": "Wireless Mouse",
       "price": 25.5,
       "category": {
-        "path": "categories/59cd3122-976d-4ae4-80bd-3d41a32df408"
+        "path": "categories/2382a406-bf05-4d26-bc87-03709d11a22e"
       },
       "tags": [
         {
-          "id": "11931676-b21c-4a60-b705-67822ccf3b26",
+          "id": "23491060-5db6-4f86-b29a-8ee402d38ada",
           "name": "Sale",
           "color": "red"
         }
@@ -59,21 +59,21 @@
     },
     {
       "id": {
-        "path": "stores/1fbac6df-5382-4a1f-94cb-f1d3976dedc2/products/37b61f1b-b308-44ca-ad43-4ceef3e8a148"
+        "path": "stores/337dc8d1-4299-46c2-b765-54b10224b790/products/2f09ec6f-109f-41ab-9d43-61af237c6c0a"
       },
       "name": "Python Guide",
       "price": 45.0,
       "category": {
-        "path": "categories/9daca256-1b91-4e40-a2fc-0cb0f2979d01"
+        "path": "categories/76c50a1a-f2a4-4b06-a4c4-e5bf4a1b44f4"
       },
       "tags": [
         {
-          "id": "e7190bfa-c54c-4b0a-b320-6e50dbc1e3d9",
+          "id": "ded16382-1aaa-47a7-9093-b346cdfb17f5",
           "name": "New",
           "color": "blue"
         },
         {
-          "id": "9ce8798d-d62b-4d9e-bc7a-743adbb0eab1",
+          "id": "1e6af991-a35e-45f3-a94c-8f92b8986293",
           "name": "Premium",
           "color": "gold"
         }
@@ -87,16 +87,16 @@
   ],
   "categories": [
     {
-      "id": "59cd3122-976d-4ae4-80bd-3d41a32df408",
+      "id": "2382a406-bf05-4d26-bc87-03709d11a22e",
       "name": {
-        "path": "stores/1fbac6df-5382-4a1f-94cb-f1d3976dedc2/categories/categories/Electronics"
+        "path": "stores/337dc8d1-4299-46c2-b765-54b10224b790/categories/Electronics"     
       },
       "description": "Electronic devices"
     },
     {
-      "id": "9daca256-1b91-4e40-a2fc-0cb0f2979d01",
+      "id": "76c50a1a-f2a4-4b06-a4c4-e5bf4a1b44f4",
       "name": {
-        "path": "stores/1fbac6df-5382-4a1f-94cb-f1d3976dedc2/categories/categories/Books"
+        "path": "stores/337dc8d1-4299-46c2-b765-54b10224b790/categories/Books"
       },
       "description": "Reading materials"
     }

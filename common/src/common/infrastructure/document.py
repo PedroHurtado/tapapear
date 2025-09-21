@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Any, Annotated, get_args, get_origin, Union, Tuple, List
+from typing import Any, Annotated, get_args, get_origin, Union, Tuple, List, Dict, Callable, Optional
 from common.util import get_id
 from pydantic import (
     BaseModel,
@@ -48,7 +48,7 @@ class BaseReference(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     @model_serializer(mode="wrap")
-    def __serialize_model(
+    def __serialize_model__(
         self, serializer: SerializerFunctionWrapHandler, info: SerializationInfo
     ):
         data = serializer(self)
@@ -82,7 +82,7 @@ class GeoPointValue(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     @model_serializer(mode="wrap")
-    def __serialize_model(
+    def __serialize_model__(
         self, serializer: SerializerFunctionWrapHandler, info: SerializationInfo
     ):
         data = serializer(self)
@@ -96,31 +96,129 @@ class GeoPointValue(BaseModel):
 
 
 class MixinSerializer(BaseModel):
+    # Cache estático por clase con nombres dunder - SOLO campos especiales
+    __metadata_cache__: Dict[str, Dict] = {}
+    __path_resolvers__: Dict[str, Callable] = {}
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs):
-        """Validación COMPLETA en tiempo de compilación usando hook de Pydantic"""
-        cls._validate_all_fields()
+        """Validación + Cache + Resolvers en una sola pasada"""
+        cls._build_metadata_cache_and_resolvers()
 
     @classmethod
-    def _validate_all_fields(cls):
-        """Valida TODOS los fields con metadata especial"""
+    def _build_metadata_cache_and_resolvers(cls):
+        """Construye cache y resolvers en tiempo de compilación - SOLO campos especiales"""
+        cls.__metadata_cache__ = {}
+        cls.__path_resolvers__ = {}
+        
         for field_name, field_info in cls.model_fields.items():
             metadata = cls._extract_metadata(field_info)
+            
+            # ✅ OPTIMIZACIÓN - Solo cachear campos con metadata útil
+            if metadata:  # Solo si no está vacío
+                cls.__metadata_cache__[field_name] = metadata
+                
+                # Crear resolver específico según tipo
+                if metadata.get("collection"):
+                    cls._validate_collection_field(field_name, field_info, metadata)
+                    cls.__path_resolvers__[field_name] = cls._create_collection_resolver(
+                        field_name, metadata
+                    )
+                elif metadata.get("reference"):
+                    cls._validate_reference_field(field_name, field_info, metadata)
+                    cls.__path_resolvers__[field_name] = cls._create_reference_resolver(
+                        field_name, metadata
+                    )
 
-            if "collection" in metadata:
-                cls._validate_collection_field(field_name, field_info, metadata)
-            elif "reference" in metadata:
-                cls._validate_reference_field(field_name, field_info, metadata)
+    @classmethod
+    def _create_collection_resolver(cls, field_name: str, metadata: dict) -> Callable:
+        """Crea resolver optimizado para collection fields"""
+        collection_pattern = metadata.get("collection_name")
+        
+        if collection_pattern is None:
+            # collection() - usar field_name + id
+            def resolve_path(self, item):
+                base = self._get_base_path()
+                return f"{base}/{field_name}/{item.id}"
+            resolve_path.reference_field = "id"
+            return resolve_path
+        
+        elif "{" not in collection_pattern:
+            # collection("fixed_name") - nombre fijo + id  
+            def resolve_path(self, item):
+                base = self._get_base_path()
+                return f"{base}/{collection_pattern}/{item.id}"
+            resolve_path.reference_field = "id"
+            return resolve_path
+        
+        else:
+            # collection("path/{placeholder}") - resolver dinámicamente
+            placeholders = PLACEHOLDER_PATTERN.findall(collection_pattern)
+            reference_field = next((p for p in placeholders if p != "id"), "id")
+            
+            def resolve_path(self, item):
+                base = self._get_base_path()
+                resolved = collection_pattern
+                for placeholder in placeholders:
+                    if placeholder == "id":
+                        resolved = resolved.replace("{id}", str(item.id))
+                    else:
+                        value = getattr(item, placeholder, "")
+                        resolved = resolved.replace(f"{{{placeholder}}}", str(value))
+                return f"{base}/{resolved}"
+            
+            resolve_path.reference_field = reference_field
+            return resolve_path
+
+    @classmethod  
+    def _create_reference_resolver(cls, field_name: str, metadata: dict) -> Callable:
+        """Crea resolver optimizado para reference fields - TODAS las variantes"""
+        collection_pattern = metadata.get("collection_name")
+        
+        if collection_pattern is None:
+            # reference() - inferir del tipo del objeto referenciado
+            def resolve_path(self, referenced_item):
+                return f"{plural(referenced_item.__class__.__name__.lower())}/{referenced_item.id}"
+            return resolve_path
+        
+        elif "{" not in collection_pattern:
+            # reference("fixed_collection") - nombre fijo + id del referenciado
+            def resolve_path(self, referenced_item):
+                return f"{collection_pattern}/{referenced_item.id}"
+            return resolve_path
+        
+        else:
+            # reference("collection/{field}") - resolver placeholders desde self + id del referenciado
+            def resolve_path(self, referenced_item):
+                resolved = collection_pattern
+                
+                # Resolver placeholders usando valores de self (objeto padre)
+                placeholders = PLACEHOLDER_PATTERN.findall(collection_pattern)
+                for placeholder in placeholders:
+                    if placeholder == "id":
+                        # {id} se refiere al ID del objeto referenciado
+                        resolved = resolved.replace("{id}", str(referenced_item.id))
+                    else:
+                        # Otros placeholders se buscan en self (objeto padre)
+                        attr_value = getattr(self, placeholder, None)
+                        if attr_value is not None:
+                            resolved = resolved.replace(f"{{{placeholder}}}", str(attr_value))
+                
+                # Si no había {id} en el pattern, agregarlo al final
+                if "{id}" not in collection_pattern:
+                    resolved = f"{resolved}/{referenced_item.id}"
+                
+                return resolved
+            return resolve_path
 
     @classmethod
     def _validate_collection_field(cls, field_name: str, field_info, metadata: dict):
         """Valida configuración de campos collection"""
-        # Obtener tipo del elemento
+        # Obtener tipo del elemento (manejando Optional)
         element_type = cls._get_list_element_type(field_info)
         if not element_type:
             raise ValueError(
-                f"Campo '{field_name}' debe ser List[T] para usar collection()"
+                f"Campo '{field_name}' debe ser List[T] o Optional[List[T]] para usar collection()"
             )
 
         collection_name = metadata.get("collection_name")
@@ -183,18 +281,22 @@ class MixinSerializer(BaseModel):
 
     @classmethod
     def _get_list_element_type(cls, field_info):
-        """Extrae el tipo de elemento de List[T]"""
+        """Extrae el tipo de elemento de List[T] o Optional[List[T]]"""
         try:
             field_annotation = field_info.annotation
 
-            if hasattr(field_annotation, "__origin__") and hasattr(
-                field_annotation, "__args__"
-            ):
-                origin = field_annotation.__origin__
-                args = field_annotation.__args__
+            # Manejar Union (Optional)
+            if get_origin(field_annotation) is Union:
+                args = get_args(field_annotation)
+                # Buscar el tipo que no sea NoneType
+                for arg in args:
+                    if arg is not type(None) and get_origin(arg) in (list, List):
+                        return get_args(arg)[0] if get_args(arg) else None
 
-                if origin in (list, List, set, tuple) and args:
-                    return args[0]
+            # Manejar List directo
+            if get_origin(field_annotation) in (list, List):
+                args = get_args(field_annotation)
+                return args[0] if args else None
 
             return None
         except Exception:
@@ -225,58 +327,58 @@ class MixinSerializer(BaseModel):
     @classmethod
     def _has_collection_fields(cls) -> bool:
         """Verifica si la clase tiene algún campo collection"""
-        for field_info in cls.model_fields.values():
-            metadata = cls._extract_metadata(field_info)
-            if "collection" in metadata:
+        # ✅ OPTIMIZACIÓN - Usar cache en lugar de recorrer todo
+        for metadata in cls.__metadata_cache__.values():
+            if metadata.get("collection"):
                 return True
         return False
 
     @model_serializer(mode="wrap")
-    def __serialize_model(self, serializer: SerializerFunctionWrapHandler):
+    def __serialize_model__(self, serializer: SerializerFunctionWrapHandler):
+        """Serialización sin filtrar None - preserva valores explícitos"""
         data = serializer(self)
         if not isinstance(data, dict):
             return data
-
-        # Filtrar valores None
-        filtered_data = {k: v for k, v in data.items() if v is not None}
-        return filtered_data
+        
+        # ✅ NO filtrar None - preservar para ChangeTracker
+        return data
 
     @field_serializer("*")
     def __serialize_references(self, value: Any, info: FieldSerializationInfo) -> Any:
-        # Verificación temprana
+        # Verificación temprana - PRESERVAR None explícitos
         if value is None:
             return None
 
-        field_info = self.__class__.model_fields.get(info.field_name)
-        metadata = self._extract_metadata(field_info) if field_info else {}
-
-        # Sin metadata, serialización normal
+        field_name = info.field_name
+        
+        # 🚀 CACHE HIT - Solo campos especiales están en cache
+        metadata = self.__class__.__metadata_cache__.get(field_name)
+        
         if not metadata:
             return self._serialize_normal_field(value)
 
-        # Pattern matching para diferentes tipos de metadata
-        match metadata:
-            case {"id": True}:
-                return self._serialize_id_field(value, info)
+        # 🚀 RESOLVER DIRECTO - Sin pattern matching
+        if metadata.get("id"):
+            return self._serialize_id_optimized(value, info)
+        
+        elif metadata.get("reference"):
+            # Manejar Optional[Document] = None ya verificado arriba
+            resolver = self.__class__.__path_resolvers__[field_name]
+            path = resolver(self, value)
+            return {"path": path}
+        
+        elif metadata.get("geopoint"):
+            return self._serialize_geopoint_optimized(value)
+        
+        elif metadata.get("collection"):
+            return self._serialize_collection_optimized(value, field_name)
+        
+        return self._serialize_normal_field(value)
 
-            case {"reference": True}:
-                return self._serialize_reference_field(value, metadata)
-
-            case {"geopoint": True}:
-                return self._serialize_geopoint_field(value)
-
-            case {"collection": True}:
-                return self._serialize_subcollection_field(
-                    value, info.field_name, metadata, info
-                )
-
-            case _:
-                return self._serialize_normal_field(value)
-
-    def _serialize_id_field(
+    def _serialize_id_optimized(
         self, value: Any, info: FieldSerializationInfo
     ) -> Union[DocumentId, CollectionReference, str]:
-        """Maneja la serialización de campos ID"""
+        """Maneja la serialización de campos ID optimizada"""
         document_path = info.context.get("document_path") if info.context else None
 
         if document_path:
@@ -291,31 +393,10 @@ class MixinSerializer(BaseModel):
 
     def _is_root_document(self) -> bool:
         """Verifica si este documento es el root (no está anidado)"""
-        # Un documento es root si tiene collections propias
         return self._has_collection_fields()
 
-    def _serialize_reference_field(
-        self, value: Any, metadata: dict
-    ) -> DocumentReference:
-        """Maneja la serialización de campos reference"""
-        if not isinstance(value, Document):
-            raise ValueError(
-                f"El valor de referencia debe ser una instancia de Document, recibido: {type(value)}"
-            )
-
-        # Obtener nombre de colección
-        collection_pattern = metadata.get("collection_name")
-        if collection_pattern is None:
-            # Inferir automáticamente del tipo
-            collection_pattern = plural(value.__class__.__name__.lower())
-
-        # Resolver path con placeholders
-        resolved_path = self._resolve_path_placeholders(collection_pattern, value)
-
-        return DocumentReference(path=resolved_path)
-
-    def _serialize_geopoint_field(self, value: Any) -> GeoPointValue:
-        """Maneja la serialización de campos geopoint"""
+    def _serialize_geopoint_optimized(self, value: Any) -> Optional[GeoPointValue]:
+        """Maneja la serialización de campos geopoint optimizada"""
         if value is None:
             return None
 
@@ -336,118 +417,83 @@ class MixinSerializer(BaseModel):
                 f"Recibido: {type(value)} = {value}"
             )
 
-    def _serialize_subcollection_field(
-        self,
-        value: Any,
-        field_name: str,
-        metadata: dict,
-        info: FieldSerializationInfo,
-    ) -> List[dict]:
-        """Serializa campos collection - sin validaciones, solo serialización"""
-        parent_path = info.context.get("parent_path") if info.context else None
-
-        # Obtener patrón (ya validado en __init_subclass__)
-        collection_pattern = metadata.get("collection_name")
-        if collection_pattern is None:
-            # Sin patrón específico - usar nombre del field
-            collection_pattern = field_name
-
-        # 🔧 FIX: Construir path base correctamente
-        base_collection_path = self._build_collection_path(
-            collection_pattern, parent_path
-        )
-
-        # Convertir a lista
-        if isinstance(value, set):
-            iterable = list(value)
-        elif isinstance(value, (list, tuple)):
-            iterable = value
-        else:
-            iterable = [value] if value is not None else []
-
-        # Serializar cada item
+    def _serialize_collection_optimized(self, value: Any, field_name: str) -> Optional[List[dict]]:
+        """Serialización de collections SIN model_dump, preservando None"""
+        # Manejar Optional[List[T]] = None
+        if value is None:
+            return None
+        
+        if not value:  # Lista vacía
+            return []
+        
+        resolver = self.__class__.__path_resolvers__[field_name]
+        reference_field = getattr(resolver, 'reference_field', 'id')
+        
         result = []
-        for item in iterable:
-            if not hasattr(item, "model_dump"):
+        items = list(value) if isinstance(value, set) else value
+        
+        for item in items:
+            if not hasattr(item, '__dict__'):
                 result.append(item)
                 continue
-
-            # Determinar campo a convertir (ya validado)
-            reference_field = self._get_collection_reference_field(collection_pattern)
-
-            # 🔧 FIX: Serializar item con path correcto
-            serialized_item = self._serialize_collection_item_with_reference(
-                item, base_collection_path, collection_pattern, reference_field
-            )
-            result.append(serialized_item)
-
+            
+            # 🚀 SERIALIZACIÓN MANUAL - Sin model_dump, preservando None
+            item_data = self._manual_serialize_item(item)
+            
+            # 🚀 RESOLVER DIRECTO - Path optimizado
+            item_path = resolver(self, item)
+            item_data[reference_field] = {"path": item_path}
+            
+            result.append(item_data)
+        
         return result
 
-    def _get_collection_reference_field(self, collection_pattern: str) -> str:
-        """🔧 FIX: Determina qué campo convertir a CollectionReference"""
-        placeholders = PLACEHOLDER_PATTERN.findall(collection_pattern)
-
-        # Si hay placeholders, usar el primero que NO sea 'id'
-        for placeholder in placeholders:
-            if placeholder != "id":
-                return placeholder
-
-        # Si no hay placeholders o solo hay {id}, usar 'id'
-        return "id"
-
-    def _serialize_collection_item_with_reference(
-        self, item: Any, base_path: str, pattern: str, reference_field: str
-    ) -> dict:
-        """🔧 FIX: Serializa item convirtiendo campo específico a CollectionReference"""
-
-        # 🔧 FIX: Resolver path del item individual
-        item_path = self._resolve_item_path_fixed(pattern, item, base_path)
-
-        # Serializar item
-        item_data = item.model_dump(mode="json", exclude_none=True)
-
-        # Convertir campo a CollectionReference
-        item_data[reference_field] = CollectionReference(path=item_path).model_dump(
-            mode="json"
-        )
-
-        return item_data
-
-    def _resolve_item_path_fixed(self, pattern: str, item: Any, base_path: str) -> str:
-        """🔧 NUEVO: Resuelve path para item individual correctamente"""
-
-        # Si el patrón no tiene placeholders, es el path directo
-        if "{" not in pattern:
-            # pattern es simplemente el nombre de la colección (ej: "products")
-            # El ID del item se agrega al final
-            item_id = getattr(item, "id", None)
-            if item_id:
-                return f"{base_path}/{str(item_id)}"
+    def _manual_serialize_item(self, item: Any) -> dict:
+        """Serialización manual preservando None values y usando resolvers"""
+        if not hasattr(item, 'model_fields'):
+            return item.__dict__.copy()
+        
+        result = {}
+        for field_name, field_info in item.__class__.model_fields.items():
+            value = getattr(item, field_name, None)
+            
+            # 🔥 PRESERVAR None - No excluir nunca
+            if value is None:
+                result[field_name] = None
+                continue
+            
+            # 🚀 USAR RESOLVERS del item para campos especiales
+            item_metadata = item.__class__.__metadata_cache__.get(field_name)
+            
+            if item_metadata:
+                # Campo especial - usar el sistema de serialización
+                if item_metadata.get("reference") and value is not None:
+                    resolver = item.__class__.__path_resolvers__[field_name]
+                    # ✅ CORRECCIÓN: Los placeholders en reference se resuelven desde el objeto padre (item), no desde el referenciado (value)
+                    path = resolver(item, value)
+                    result[field_name] = {"path": path}
+                elif item_metadata.get("geopoint"):
+                    result[field_name] = item._serialize_geopoint_optimized(value)
+                elif item_metadata.get("id"):
+                    result[field_name] = str(value)  # IDs siempre como string en nested
+                else:
+                    result[field_name] = value
             else:
-                return base_path
-
-        # Si tiene placeholders, resolverlos con valores del item
-        resolved_pattern = pattern
-        placeholders = PLACEHOLDER_PATTERN.findall(pattern)
-
-        for placeholder in placeholders:
-            if placeholder == "id":
-                # Placeholder {id} se refiere al ID del item
-                item_id = getattr(item, "id", None)
-                if item_id:
-                    resolved_pattern = resolved_pattern.replace("{id}", str(item_id))
-            else:
-                # 🔧 FIX: Otros placeholders se buscan en el item, NO en self
-                attr_value = getattr(item, placeholder, None)
-                if attr_value is not None:
-                    resolved_pattern = resolved_pattern.replace(
-                        f"{{{placeholder}}}", str(attr_value)
-                    )
-
-        # 🔧 FIX: Construir path completo con base_path + pattern resuelto
-        # El base_path ya contiene "stores/UUID/categories"
-        # El resolved_pattern será "Electronics" (después de resolver {name})
-        return f"{base_path}/{resolved_pattern}"
+                # Campo normal
+                if isinstance(value, (list, set, tuple)):
+                    if not value:  # Colección vacía
+                        result[field_name] = []
+                    else:
+                        result[field_name] = [
+                            self._manual_serialize_item(x) if hasattr(x, 'model_fields') else x 
+                            for x in value
+                        ]
+                elif hasattr(value, 'model_fields'):
+                    result[field_name] = self._manual_serialize_item(value)
+                else:
+                    result[field_name] = value
+        
+        return result
 
     def _serialize_normal_field(self, value: Any) -> Any:
         """Serializa campos normales sin metadata especial"""
@@ -470,121 +516,18 @@ class MixinSerializer(BaseModel):
         if not hasattr(item, "__dict__"):
             return item
 
-        # Para objetos Document, serializar completamente SIN contexto
-        # y SIN pasar por nuestro serializer personalizado
-        if hasattr(item, "model_dump"):
-            # Usar mode='json' sin context para que Pydantic maneje todo normalmente
-            return item.model_dump(mode="json", exclude_none=True)
+        # Para objetos Document, usar serialización manual preservando None
+        if hasattr(item, "model_fields"):
+            return self._manual_serialize_item(item)
 
-        # Si no tiene ID, devolver tal cual (para compatibilidad)
         return item
 
-    def _infer_collection_name_from_field_type(self, field_name: str) -> str:
-        """Infiere el nombre de colección desde el tipo List[T]"""
-        try:
-            field_info = self.__class__.model_fields.get(field_name)
-            if not field_info:
-                return plural(field_name)
-
-            # Obtener tipo de la anotación
-            field_annotation = field_info.annotation
-
-            # Manejar List[T], Set[T], etc.
-            if hasattr(field_annotation, "__origin__") and hasattr(
-                field_annotation, "__args__"
-            ):
-                origin = field_annotation.__origin__
-                args = field_annotation.__args__
-
-                if origin in (list, List, set, tuple) and args:
-                    element_type = args[0]
-                    if hasattr(element_type, "__name__"):
-                        return plural(element_type.__name__.lower())
-
-            # Fallback
-            return plural(field_name)
-
-        except Exception:
-            return plural(field_name)
-
-    def _resolve_path_placeholders(
-        self, pattern: str, target_object: Any = None
-    ) -> str:
-        """Resuelve placeholders en patrones de path - sin validaciones"""
-        # Agregar ID si no hay placeholders
-        if target_object and "{id}" not in pattern:
-            target_id = str(target_object.id)
-            pattern = f"{pattern}/{target_id}"
-        elif "{id}" in pattern and target_object:
-            target_id = str(target_object.id)
-            pattern = pattern.replace("{id}", target_id)
-
-        # Resolver otros placeholders desde self
-        placeholders = PLACEHOLDER_PATTERN.findall(pattern)
-        for placeholder in placeholders:
-            if placeholder == "id":
-                continue
-
-            attr_value = getattr(self, placeholder, None)
-            if attr_value is not None:
-                pattern = pattern.replace(f"{{{placeholder}}}", str(attr_value))
-
-        return pattern
-
-    def _build_collection_path(
-        self, collection_pattern: str, parent_path: str = None
-    ) -> str:
-        """🔧 FIX: Construye path de colección correctamente"""
-
-        # Si tenemos parent_path, usarlo como base
-        if parent_path:
-            base_path = parent_path
-        else:
-            # Construir path del documento actual
-            class_name = plural(self.__class__.__name__.lower())
-            doc_id = None
-
-            # Buscar campo ID
-            for field_name, field_info in self.__class__.model_fields.items():
-                metadata = self._extract_metadata(field_info)
-                if metadata.get("id") is True:
-                    doc_id = getattr(self, field_name, None)
-                    break
-
-            base_path = f"{class_name}/{str(doc_id)}" if doc_id else class_name
-
-        # 🔧 FIX: NO resolver placeholders aquí - se resuelven por item individual
-        # Solo extraer el nombre base de la colección (antes del primer placeholder)
-        if "{" in collection_pattern:
-            # Extraer solo la parte antes del primer placeholder
-            base_collection_name = collection_pattern.split("{")[0].rstrip("/")
-        else:
-            base_collection_name = collection_pattern
-
-        return f"{base_path}/{base_collection_name}"
-
-    def _resolve_pattern_placeholders(self, pattern: str) -> str:
-        """🔧 NUEVO: Resuelve placeholders solo en el patrón, no afecta al path base"""
-        resolved_pattern = pattern
-        placeholders = PLACEHOLDER_PATTERN.findall(pattern)
-
-        # Reemplazar placeholders con valores de self
-        for placeholder in placeholders:
-            attr_value = getattr(self, placeholder, None)
-            if attr_value is not None:
-                resolved_pattern = resolved_pattern.replace(
-                    f"{{{placeholder}}}", str(attr_value)
-                )
-
-        return resolved_pattern
-
-    def _get_current_document_path(self) -> str:
-        """Obtiene el path del documento actual"""
+    def _get_base_path(self) -> str:
+        """Obtiene el path base del documento actual"""
         class_name = plural(self.__class__.__name__.lower())
 
-        # Buscar campo ID
-        for field_name, field_info in self.__class__.model_fields.items():
-            metadata = self._extract_metadata(field_info)
+        # ✅ OPTIMIZACIÓN - Buscar campo ID en cache optimizado
+        for field_name, metadata in self.__class__.__metadata_cache__.items():
             if metadata.get("id") is True:
                 doc_id = getattr(self, field_name, None)
                 if doc_id is not None:
@@ -592,6 +535,27 @@ class MixinSerializer(BaseModel):
                 break
 
         return class_name
+
+    def _resolve_placeholders_from_self(self, pattern: str) -> str:
+        """Resuelve placeholders usando valores de self"""
+        resolved = pattern
+        placeholders = PLACEHOLDER_PATTERN.findall(pattern)
+        
+        for placeholder in placeholders:
+            if placeholder == "id":
+                # ✅ OPTIMIZACIÓN - Buscar campo ID en cache
+                for field_name, metadata in self.__class__.__metadata_cache__.items():
+                    if metadata.get("id") is True:
+                        doc_id = getattr(self, field_name, None)
+                        if doc_id is not None:
+                            resolved = resolved.replace("{id}", str(doc_id))
+                        break
+            else:
+                attr_value = getattr(self, placeholder, None)
+                if attr_value is not None:
+                    resolved = resolved.replace(f"{{{placeholder}}}", str(attr_value))
+        
+        return resolved
 
 
 # ===== CLASES PRINCIPALES =====
