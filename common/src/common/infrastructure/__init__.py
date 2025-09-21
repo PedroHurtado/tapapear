@@ -2,7 +2,7 @@
 from .document import (   
     id,    
     reference,
-    Document,
+    Document,   
     Embeddable,
     collection,
     geopoint

@@ -1,0 +1,26 @@
+[
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "560dab1d-eccd-4eac-98a0-c3823eeba6b0"
+    },
+    "data": {
+      "name": "Mega Store",
+      "location": {
+        "latitude": 51.5074,
+        "longitude": -0.1278
+      },
+      "region": "Europe",
+      "phone_numbers": [
+        "44-20-1234"
+      ],
+      "operating_hours": [
+        8,
+        20
+      ]
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 0
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "8b4a2e84-ae69-4623-83a2-eb955f0f416b"
+    },
+    "data": {
+      "name": "Tech Hub",
+      "location": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      },
+      "region": "North America",
+      "phone_numbers": [
+        "415-555-0001"
+      ],
+      "operating_hours": [
+        10,
+        22
+      ]
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 0
+  }
+]

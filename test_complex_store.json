@@ -1,0 +1,28 @@
+[
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "41575796-86cc-4100-92d9-f7739c4cca40"
+    },
+    "data": {
+      "name": "Universal Megastore",
+      "location": {
+        "latitude": 40.7589,
+        "longitude": -73.9851
+      },
+      "region": "North America",
+      "phone_numbers": [
+        "212-555-0001",
+        "212-555-0002",
+        "1-800-MEGA-STORE"
+      ],
+      "operating_hours": [
+        6,
+        24
+      ]
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 0
+  }
+]
