@@ -2,7 +2,7 @@
   {
     "operation": "CREATE",
     "entity_id": {
-      "path": "560dab1d-eccd-4eac-98a0-c3823eeba6b0"
+      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69"
     },
     "data": {
       "name": "Mega Store",
@@ -22,5 +22,31 @@
     "deleted_fields": null,
     "array_operations": null,
     "level": 0
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69/categories/Electronics"
+    },
+    "data": {
+      "id": "bc34cf3d-039f-4175-948a-9a5ff5ee3775",
+      "description": "Electronic devices and gadgets"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69/categories/Books"
+    },
+    "data": {
+      "id": "f05bf795-f92a-40d7-a364-2368587035e3",
+      "description": "Physical and digital books"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
   }
 ]

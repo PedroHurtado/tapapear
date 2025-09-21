@@ -2,7 +2,7 @@
   {
     "operation": "CREATE",
     "entity_id": {
-      "path": "8b4a2e84-ae69-4623-83a2-eb955f0f416b"
+      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c"
     },
     "data": {
       "name": "Tech Hub",
@@ -22,5 +22,79 @@
     "deleted_fields": null,
     "array_operations": null,
     "level": 0
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/products/a19d090b-1fe6-4a18-b7d2-de857ca85508"
+    },
+    "data": {
+      "name": "Gaming Laptop",
+      "price": 1299.99,
+      "category": {
+        "path": "categories/564d8d87-4460-435c-bf4c-1ff710a57950"
+      },
+      "tags": [
+        {
+          "id": "5919f703-79c6-4694-a7bf-312ef13f6a75",
+          "name": "New",
+          "color": "green"
+        },
+        {
+          "id": "76aae7b9-dee4-4e60-8f3f-cdb4542ed139",
+          "name": "Popular",
+          "color": "red"
+        }
+      ],
+      "coordinates": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      },
+      "status": "active"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/products/bc856657-047f-4acb-8b96-64f6e4ddfafe"
+    },
+    "data": {
+      "name": "Wireless Mouse",
+      "price": 29.99,
+      "category": {
+        "path": "categories/564d8d87-4460-435c-bf4c-1ff710a57950"
+      },
+      "tags": [
+        {
+          "id": "76aae7b9-dee4-4e60-8f3f-cdb4542ed139",
+          "name": "Popular",
+          "color": "red"
+        }
+      ],
+      "coordinates": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      },
+      "status": "active"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/categories/Technology"
+    },
+    "data": {
+      "id": "564d8d87-4460-435c-bf4c-1ff710a57950",
+      "description": "Tech products"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
   }
 ]

@@ -2,7 +2,7 @@
   {
     "operation": "CREATE",
     "entity_id": {
-      "path": "41575796-86cc-4100-92d9-f7739c4cca40"
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045"
     },
     "data": {
       "name": "Universal Megastore",
@@ -24,5 +24,143 @@
     "deleted_fields": null,
     "array_operations": null,
     "level": 0
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/products/2f9ad941-fd3f-4929-9007-335dab6edd81"
+    },
+    "data": {
+      "name": "Smartphone Pro Max",
+      "price": 999.99,
+      "category": {
+        "path": "categories/127395a3-a09c-4c98-be55-b6dc7bbc04be"
+      },
+      "tags": [
+        {
+          "id": "0a536fd6-8841-4374-a37d-43afb224764e",
+          "name": "Bestseller",
+          "color": "gold"
+        },
+        {
+          "id": "06252615-c462-48e3-8363-c84c5b95c712",
+          "name": "Premium",
+          "color": "purple"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.7589,
+        "longitude": -73.9851
+      },
+      "status": "active"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/products/07a99dfc-a3f7-425c-a2a2-96c7d394cc9d"
+    },
+    "data": {
+      "name": "Science Fiction Novel",
+      "price": 15.99,
+      "category": {
+        "path": "categories/a3dfa7a6-7cba-4e01-87a3-f9dcc4062093"
+      },
+      "tags": [
+        {
+          "id": "0a536fd6-8841-4374-a37d-43afb224764e",
+          "name": "Bestseller",
+          "color": "gold"
+        },
+        {
+          "id": "0c1f1845-ea02-4ca4-bf5e-4e5a752cec64",
+          "name": "Eco-Friendly",
+          "color": "green"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.7589,
+        "longitude": -73.9851
+      },
+      "status": "active"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/products/43795af5-d695-4743-861d-85a4e61fbcb9"
+    },
+    "data": {
+      "name": "Organic Cotton T-Shirt",
+      "price": 25.5,
+      "category": {
+        "path": "categories/a929a4cf-7021-46e6-9649-2c775372740d"
+      },
+      "tags": [
+        {
+          "id": "e291c73e-8313-47f4-9a6b-6cf344ee247f",
+          "name": "Sale",
+          "color": "red"
+        },
+        {
+          "id": "0c1f1845-ea02-4ca4-bf5e-4e5a752cec64",
+          "name": "Eco-Friendly",
+          "color": "green"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.7589,
+        "longitude": -73.9851
+      },
+      "status": "inactive"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/categories/Electronics"
+    },
+    "data": {
+      "id": "127395a3-a09c-4c98-be55-b6dc7bbc04be",
+      "description": "Electronic devices"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/categories/Books"
+    },
+    "data": {
+      "id": "a3dfa7a6-7cba-4e01-87a3-f9dcc4062093",
+      "description": "Literature and education"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "CREATE",
+    "entity_id": {
+      "path": "stores/a2141473-2c45-4599-a989-4109a5686045/categories/Clothing"
+    },
+    "data": {
+      "id": "a929a4cf-7021-46e6-9649-2c775372740d",
+      "description": "Fashion and apparel"
+    },
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
   }
 ]

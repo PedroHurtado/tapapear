@@ -386,7 +386,9 @@ class MixinSerializer(BaseModel):
             return CollectionReference(path=document_path)
         elif info.context is None and self._is_root_document():
             # Estamos en ROOT → DocumentId solo con el ID
-            return DocumentId(path=str(value))
+            # Estamos en ROOT → DocumentId con collection/uuid
+            collection_name = plural(self.__class__.__name__.lower())
+            return DocumentId(path=f"{collection_name}/{str(value)}")  # ✅ stores/uuid
         else:
             # Estamos en objeto normal anidado → String directo
             return str(value)
@@ -442,7 +444,7 @@ class MixinSerializer(BaseModel):
             
             # 🚀 RESOLVER DIRECTO - Path optimizado
             item_path = resolver(self, item)
-            item_data[reference_field] = {"path": item_path}
+            item_data[reference_field] = CollectionReference(path=item_path)  # ✅ Tipo correcto
             
             result.append(item_data)
         

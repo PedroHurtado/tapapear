@@ -97,6 +97,48 @@ class ChangeTracker:
         self.dialect = dialect
         self._collection_metadata: Dict[str, Dict[str, Dict]] = {}
 
+    def _get_metadata_collection(
+        self, document: Document
+    ) -> Dict[str, Dict[str, Dict]]:
+        """Extrae metadata de collections recursivamente para toda la estructura"""
+        metadata_result = {}
+
+        def _process_entity(entity):
+            entity_type = entity.__class__.__name__
+
+            # Si ya hemos procesado este tipo, no repetir
+            if entity_type in metadata_result:
+                return
+
+            # Extraer metadata de collections para este tipo
+            collection_fields = {}
+            if hasattr(entity.__class__, "__metadata_cache__"):
+                for field_name, metadata in entity.__class__.__metadata_cache__.items():
+                    if metadata.get("collection"):
+                        collection_fields[field_name] = metadata
+
+            metadata_result[entity_type] = collection_fields
+
+            # Procesar recursivamente objetos anidados
+            for field_name, field_info in entity.model_fields.items():
+                field_value = getattr(entity, field_name, None)
+
+                if field_value is None:
+                    continue
+
+                # Si es una lista, procesar cada elemento
+                if isinstance(field_value, (list, set)):
+                    for item in field_value:
+                        if hasattr(item, "model_fields"):  # Es un Document
+                            _process_entity(item)
+
+                # Si es un objeto Document individual (reference)
+                elif hasattr(field_value, "model_fields"):
+                    _process_entity(field_value)
+
+        _process_entity(document)
+        return metadata_result
+
     def set_entity(self, document: Document, state: ChangeType) -> None:
         """Establece o actualiza el estado de una entidad con validaciones internas"""
 
@@ -104,9 +146,9 @@ class ChangeTracker:
             # Primera vez que se trackea - crear snapshot
             original_snapshot = self._create_snapshot(document)
 
-            collecton_metadata = self._get_metadata_collection(document)
-            self._collection_metadata.update(collecton_metadata)
-            
+            # ✅ NUEVA LÍNEA: Extraer metadata recursivamente
+            collection_metadata = self._get_metadata_collection(document)
+            self._collection_metadata.update(collection_metadata)
 
             entity_data = TrackedEntity(
                 entity_id=document.id,
@@ -333,18 +375,17 @@ class ChangeTracker:
         commands: List[AbstractCommand],
         operation: OperationType,
         entity_type: str = None,
-    ):
-        """Genera comandos recursivamente para CREATE/DELETE"""
+    ):       
+        
+    
+    # 1. Extraer entity_id       
 
         # 1. Extraer entity_id por tipo y obtener data sin ese campo
         entity_id, clean_data = self._extract_entity_id_and_data(data)
+        print(f"🔍 Found entity_id: {entity_id}")
 
         if not entity_id:
-            return
-
-        # 2. Para CREATE, filtrar None values
-        if operation == OperationType.CREATE:
-            clean_data = self._filter_none_recursive(clean_data)
+            return        
 
         # 3. Recorrer UNA sola vez: separar collections de command data
         final_command_data = {}
@@ -389,46 +430,7 @@ class ChangeTracker:
                             )
 
     # ==================== NUEVOS HELPERS ====================
-    def _get_metadata_collection(self, document: Document) -> Dict[str, Dict[str, Dict]]:
-        """Extrae metadata de collections recursivamente para toda la estructura"""
-        metadata_result = {}
-        
-        def _process_entity(entity):
-            entity_type = entity.__class__.__name__
-            
-            # Si ya hemos procesado este tipo, no repetir
-            if entity_type in metadata_result:
-                return
-            
-            # Extraer metadata de collections para este tipo
-            collection_fields = {}
-            if hasattr(entity.__class__, '__metadata_cache__'):
-                for field_name, metadata in entity.__class__.__metadata_cache__.items():
-                    if metadata.get('collection'):
-                        collection_fields[field_name] = metadata
-            
-            metadata_result[entity_type] = collection_fields
-            
-            # Procesar recursivamente objetos anidados
-            for field_name, field_info in entity.model_fields.items():
-                field_value = getattr(entity, field_name, None)
-                
-                if field_value is None:
-                    continue
-                    
-                # Si es una lista, procesar cada elemento
-                if isinstance(field_value, (list, set)):
-                    for item in field_value:
-                        if hasattr(item, 'model_fields'):  # Es un Document
-                            _process_entity(item)
-                
-                # Si es un objeto Document individual
-                elif hasattr(field_value, 'model_fields'):
-                    _process_entity(item)
-        
-        _process_entity(document)
-        return metadata_result
-    
+
     def _extract_entity_id_and_data(
         self, data: Dict
     ) -> tuple[Optional[Union[DocumentId, CollectionReference]], Dict]:
