@@ -1,52 +1,32 @@
 [
   {
-    "operation": "CREATE",
+    "operation": "DELETE",
     "entity_id": {
-      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69"
+      "path": "stores/29f0a2fa-94e5-4655-940f-dad224677af6/categories/Electronics"
     },
-    "data": {
-      "name": "Mega Store",
-      "location": {
-        "latitude": 51.5074,
-        "longitude": -0.1278
-      },
-      "region": "Europe",
-      "phone_numbers": [
-        "44-20-1234"
-      ],
-      "operating_hours": [
-        8,
-        20
-      ]
+    "data": {},
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "DELETE",
+    "entity_id": {
+      "path": "stores/29f0a2fa-94e5-4655-940f-dad224677af6/categories/Books"
     },
+    "data": {},
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "DELETE",
+    "entity_id": {
+      "path": "stores/29f0a2fa-94e5-4655-940f-dad224677af6"
+    },
+    "data": {},
     "deleted_fields": null,
     "array_operations": null,
     "level": 0
-  },
-  {
-    "operation": "CREATE",
-    "entity_id": {
-      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69/categories/Electronics"
-    },
-    "data": {
-      "id": "bc34cf3d-039f-4175-948a-9a5ff5ee3775",
-      "description": "Electronic devices and gadgets"
-    },
-    "deleted_fields": null,
-    "array_operations": null,
-    "level": 1
-  },
-  {
-    "operation": "CREATE",
-    "entity_id": {
-      "path": "stores/44ffb950-7299-4a74-aea4-207c235eeb69/categories/Books"
-    },
-    "data": {
-      "id": "f05bf795-f92a-40d7-a364-2368587035e3",
-      "description": "Physical and digital books"
-    },
-    "deleted_fields": null,
-    "array_operations": null,
-    "level": 1
   }
 ]

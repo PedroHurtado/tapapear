@@ -1,100 +1,42 @@
 [
   {
-    "operation": "CREATE",
+    "operation": "DELETE",
     "entity_id": {
-      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c"
+      "path": "stores/39e29570-0f4c-431f-9dce-7a5e08012445/products/f07d66da-1768-43f5-9505-25e2d4124be2"
     },
-    "data": {
-      "name": "Tech Hub",
-      "location": {
-        "latitude": 37.7749,
-        "longitude": -122.4194
-      },
-      "region": "North America",
-      "phone_numbers": [
-        "415-555-0001"
-      ],
-      "operating_hours": [
-        10,
-        22
-      ]
+    "data": {},
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "DELETE",
+    "entity_id": {
+      "path": "stores/39e29570-0f4c-431f-9dce-7a5e08012445/products/6eb8ec02-33fb-4127-9035-bc8ea48a55f4"
     },
+    "data": {},
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "DELETE",
+    "entity_id": {
+      "path": "stores/39e29570-0f4c-431f-9dce-7a5e08012445/categories/Technology"
+    },
+    "data": {},
+    "deleted_fields": null,
+    "array_operations": null,
+    "level": 1
+  },
+  {
+    "operation": "DELETE",
+    "entity_id": {
+      "path": "stores/39e29570-0f4c-431f-9dce-7a5e08012445"
+    },
+    "data": {},
     "deleted_fields": null,
     "array_operations": null,
     "level": 0
-  },
-  {
-    "operation": "CREATE",
-    "entity_id": {
-      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/products/a19d090b-1fe6-4a18-b7d2-de857ca85508"
-    },
-    "data": {
-      "name": "Gaming Laptop",
-      "price": 1299.99,
-      "category": {
-        "path": "categories/564d8d87-4460-435c-bf4c-1ff710a57950"
-      },
-      "tags": [
-        {
-          "id": "5919f703-79c6-4694-a7bf-312ef13f6a75",
-          "name": "New",
-          "color": "green"
-        },
-        {
-          "id": "76aae7b9-dee4-4e60-8f3f-cdb4542ed139",
-          "name": "Popular",
-          "color": "red"
-        }
-      ],
-      "coordinates": {
-        "latitude": 37.7749,
-        "longitude": -122.4194
-      },
-      "status": "active"
-    },
-    "deleted_fields": null,
-    "array_operations": null,
-    "level": 1
-  },
-  {
-    "operation": "CREATE",
-    "entity_id": {
-      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/products/bc856657-047f-4acb-8b96-64f6e4ddfafe"
-    },
-    "data": {
-      "name": "Wireless Mouse",
-      "price": 29.99,
-      "category": {
-        "path": "categories/564d8d87-4460-435c-bf4c-1ff710a57950"
-      },
-      "tags": [
-        {
-          "id": "76aae7b9-dee4-4e60-8f3f-cdb4542ed139",
-          "name": "Popular",
-          "color": "red"
-        }
-      ],
-      "coordinates": {
-        "latitude": 37.7749,
-        "longitude": -122.4194
-      },
-      "status": "active"
-    },
-    "deleted_fields": null,
-    "array_operations": null,
-    "level": 1
-  },
-  {
-    "operation": "CREATE",
-    "entity_id": {
-      "path": "stores/25a6a729-7244-4163-96eb-bcb6c611af6c/categories/Technology"
-    },
-    "data": {
-      "id": "564d8d87-4460-435c-bf4c-1ff710a57950",
-      "description": "Tech products"
-    },
-    "deleted_fields": null,
-    "array_operations": null,
-    "level": 1
   }
 ]
