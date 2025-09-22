@@ -36,8 +36,6 @@ class Product(Document):
     coordinates: Union[tuple, dict] = geopoint()  # Acepta tuple o dict
     status: Status
 
-class Foo(Product):
-    pass
 
 class Store(Document):
     name: str
