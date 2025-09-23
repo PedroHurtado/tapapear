@@ -6,20 +6,22 @@ from enum import Enum
 from uuid import uuid4
 
 from common.infrastructure import Document,reference,collection,geopoint
+from common.infrastructure.entity_decorator import entity
 # ===== MODELO DE DATOS =====
 
 class Status(Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
 
+@entity
 class Category(Document):
     name: str
     description: str
-
+@entity
 class Tag(Document):
     name: str
     color: str
-
+@entity
 class Product(Document):
     name: str
     price: float
@@ -27,8 +29,8 @@ class Product(Document):
     tags: Set[Tag] = set()  # Set normal, no collection
     coordinates: Union[tuple, dict] = geopoint()  # Acepta tuple o dict
     status: Status
-class Foo(Product):...
 
+@entity
 class Store(Document):
     name: str
     location: dict = geopoint()
@@ -94,17 +96,23 @@ def create_test_data():
 # ===== TEST =====
 
 def run_test():
+    import json
+    
+
     print("🚀 CREANDO DATOS...")
     store = create_test_data()
     
-    print("\n📦 SERIALIZANDO...")
-    result = store.model_dump(mode='json')
     
+    print(json.dumps(Store.__document_schema__, indent=2, ensure_ascii=False))
+
+    #print("\n📦 SERIALIZANDO...")
+    #result = store.model_dump(mode="json")
+    #print(json.dumps(result, indent=2, ensure_ascii=False))
+
     print("\n🎯 RESULTADO:")
-    import json
-    print(json.dumps(result, indent=2, ensure_ascii=False))
     
-    return result
+    
+    #return result
 
 if __name__ == "__main__":
     run_test()

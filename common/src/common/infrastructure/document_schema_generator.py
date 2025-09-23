@@ -1,524 +1,629 @@
 from typing import Any, Dict, List, Optional, Set, get_args, get_origin, Union, Type
 from pydantic import BaseModel
-from pydantic.json_schema import GenerateJsonSchema
+from common.inflect import plural
 from enum import Enum
 import inspect
 import re
 
+# ==================== CONSTANTS ====================
+
+PLACEHOLDER_PATTERN = re.compile(r'\{([^}]+)\}')
+
+class FieldTypes:
+    ID = "id"
+    GEOPOINT = "geopoint"
+    REFERENCE = "reference"
+    COLLECTION = "collection"
+    PRIMITIVE = "primitive"
+    ENUM = "enum"
+    EMBEDDED = "embedded"
+    SIMPLE_ARRAY = "simple_array"
+    OBJECT_ARRAY = "object_array"
+    SET = "set"
+    TUPLE = "tuple"
+    UNKNOWN = "unknown"
+
+class EntityTypes:
+    DOCUMENT = "document"
+    EMBEDDABLE = "embeddable"
+
+class Strategies:
+    ID_FIELD = "id_field"
+    GEOPOINT_VALUE = "geopoint_value"
+    REFERENCE_PATH = "reference_path"
+    COLLECTION_WITH_PATHS = "collection_with_paths"
+    DIRECT = "direct"
+    DIRECT_ARRAY = "direct_array"
+
+class DiffStrategies:
+    BY_ID = "by_id"
+    ARRAY_OPERATIONS = "array_operations"
+    SET_COMPARISON = "set_comparison"
+    DIRECT_COMPARISON = "direct_comparison"
+
+class MetadataKeys:
+    ID = "id"
+    GEOPOINT = "geopoint"
+    REFERENCE = "reference"
+    COLLECTION = "collection"
+
+class SchemaKeys:
+    PROPERTIES = "properties"
+    ENTITY_METADATA = "entity_metadata"
+    TYPE = "type"
+    STRATEGY = "strategy"
+    REFERENCE_METADATA = "reference_metadata"
+    COLLECTION_METADATA = "collection_metadata"
+    ARRAY_METADATA = "array_metadata"
+    TARGET_ENTITY = "target_entity"
+    PATH_RESOLVER = "path_resolver"
+    ELEMENT_ENTITY = "element_entity"
+    PATH_PATTERN = "path_pattern"
+    REFERENCE_field = "reference_field"
+    DIFF_STRATEGY = "diff_strategy"
+    ELEMENT_TYPE = "element_type"
+    ENTITY_NAME = "entity_name"
+    ID_FIELD = "id_field"
+    COLLECTION_NAME = "collection_name"
+    DEPENDENCIES = "dependencies"
+    DOCUMENTS = "documents"
+    EMBEDDABLES = "embeddables"
+
+class PlaceholderKeys:
+    ID = "id"
+
+class FieldCategories:
+    SET = "set"
+    LIST = "list"  
+    TUPLE = "tuple"
+    PRIMITIVE = "primitive"
+    ENUM = "enum"
+    EMBEDDED = "embedded"
+    UNKNOWN = "unknown"
+
+class ElementTypes:
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+PRIMITIVE_TYPES = frozenset({str, int, float, bool})
+EXCLUDED_METADATA_KEYS = frozenset({'string', 'integer', 'number', 'boolean'})
+CONTAINER_TYPES = frozenset({list, set, tuple})
+
+# ==================== SCHEMA BUILDERS ====================
+
+class SchemaBuilder:
+    """Factory para construcción de schemas con constantes"""
+    
+    @staticmethod
+    def build_basic_schema(field_type: str, strategy: str) -> Dict[str, str]:
+        return {
+            SchemaKeys.TYPE: field_type,
+            SchemaKeys.STRATEGY: strategy
+        }
+    
+    @staticmethod
+    def build_reference_schema(target_entity: str, path_resolver: str) -> Dict[str, Any]:
+        return {
+            SchemaKeys.TYPE: FieldTypes.REFERENCE,
+            SchemaKeys.STRATEGY: Strategies.REFERENCE_PATH,
+            SchemaKeys.REFERENCE_METADATA: {
+                SchemaKeys.TARGET_ENTITY: target_entity,
+                SchemaKeys.PATH_RESOLVER: path_resolver
+            }
+        }
+    
+    @staticmethod
+    def build_collection_schema(element_entity: str, path_pattern: str, reference_field: str) -> Dict[str, Any]:
+        return {
+            SchemaKeys.TYPE: FieldTypes.COLLECTION,
+            SchemaKeys.STRATEGY: Strategies.COLLECTION_WITH_PATHS,
+            SchemaKeys.COLLECTION_METADATA: {
+                SchemaKeys.ELEMENT_ENTITY: element_entity,
+                SchemaKeys.PATH_PATTERN: path_pattern,
+                SchemaKeys.REFERENCE_field: reference_field,
+                SchemaKeys.DIFF_STRATEGY: DiffStrategies.BY_ID
+            }
+        }
+    
+    @staticmethod
+    def build_array_schema(field_type: str, element_type: str, diff_strategy: str) -> Dict[str, Any]:
+        return {
+            SchemaKeys.TYPE: field_type,
+            SchemaKeys.STRATEGY: Strategies.DIRECT_ARRAY,
+            SchemaKeys.ARRAY_METADATA: {
+                SchemaKeys.ELEMENT_TYPE: element_type,
+                SchemaKeys.DIFF_STRATEGY: diff_strategy
+            }
+        }
+    
+    @staticmethod
+    def build_tuple_schema() -> Dict[str, Any]:
+        return {
+            SchemaKeys.TYPE: FieldTypes.TUPLE,
+            SchemaKeys.STRATEGY: Strategies.DIRECT,
+            SchemaKeys.ARRAY_METADATA: {
+                SchemaKeys.ELEMENT_TYPE: ElementTypes.MIXED,
+                SchemaKeys.DIFF_STRATEGY: DiffStrategies.DIRECT_COMPARISON
+            }
+        }
+    
+    @staticmethod
+    def build_entity_schema(properties: Dict[str, Any], entity_metadata: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            SchemaKeys.PROPERTIES: properties,
+            SchemaKeys.ENTITY_METADATA: entity_metadata
+        }
+
+# ==================== FIELD PROCESSORS ====================
+
+class FieldProcessor:
+    """Procesador de campos con validaciones robustas"""
+    
+    def __init__(self, all_models: Dict[str, Type[BaseModel]]):
+        self.all_models = all_models
+    
+    def process_reference_field(self, field_info, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Procesa campo reference con validación completa"""
+        target_type = self._extract_base_type(field_info.annotation)
+        target_entity = target_type.__name__ if target_type else 'Unknown'
+        collection_name = metadata.get('collection_name')
+        
+        if collection_name:
+            path_resolver = self._resolve_path_pattern(collection_name, target_entity, target_type)
+        else:
+            path_resolver = f"{plural(target_entity.lower())}/{{{target_entity}.{PlaceholderKeys.ID}}}"
+        
+        return SchemaBuilder.build_reference_schema(target_entity, path_resolver)
+    
+    def process_collection_field(self, field_name: str, field_info, metadata: Dict[str, Any], current_entity: str) -> Dict[str, Any]:
+        """Procesa campo collection con validación de placeholders"""
+        element_type = self._extract_list_element_type(field_info.annotation)
+        element_entity = element_type.__name__ if element_type else 'Unknown'
+        collection_name = metadata.get('collection_name')
+        
+        if collection_name:
+            self._validate_collection_placeholders(collection_name, element_type)
+            path_pattern = self._build_collection_path(collection_name, element_entity, element_type, current_entity)
+            reference_field = self._determine_reference_field(PLACEHOLDER_PATTERN.findall(collection_name))
+        else:
+            path_pattern = f"{plural(current_entity.lower())}/{{{current_entity}.{PlaceholderKeys.ID}}}/{field_name}/{{{element_entity}.{PlaceholderKeys.ID}}}"
+            reference_field = PlaceholderKeys.ID
+        
+        return SchemaBuilder.build_collection_schema(element_entity, path_pattern, reference_field)
+    
+    def _validate_collection_placeholders(self, collection_name: str, element_type: Type):
+        """Valida placeholders según si es Document o Embeddable"""
+        placeholders = PLACEHOLDER_PATTERN.findall(collection_name)
+        
+        for placeholder in placeholders:
+            if placeholder == PlaceholderKeys.ID and not self._is_document_type(element_type):
+                raise ValueError(
+                    f"Placeholder '{{{PlaceholderKeys.ID}}}' usado en collection(\"{collection_name}\") "
+                    f"pero {element_type.__name__} es Embeddable (sin campo id). "
+                    f"Los Embeddables no tienen ID para usar en paths."
+                )
+            elif placeholder != PlaceholderKeys.ID:
+                self._validate_field_exists(placeholder, element_type, collection_name)
+    
+    def _validate_field_exists(self, placeholder: str, element_type: Type, collection_name: str):
+        """Valida que un campo existe en el tipo"""
+        if not hasattr(element_type, 'model_fields') or placeholder not in element_type.model_fields:
+            available_fields = list(element_type.model_fields.keys()) if hasattr(element_type, 'model_fields') else []
+            raise ValueError(
+                f"Placeholder '{{{placeholder}}}' en collection(\"{collection_name}\") "
+                f"no existe en {element_type.__name__}. "
+                f"Campos disponibles: {available_fields}"
+            )
+    
+    def _build_collection_path(self, collection_name: str, element_entity: str, element_type: Type, parent_entity: str) -> str:
+        """Construye path de collection con validación"""
+        parent_collection = plural(parent_entity.lower())
+        
+        if not collection_name.startswith(parent_collection):
+            resolved_pattern = self._resolve_path_pattern(collection_name, element_entity, element_type)
+            return f"{parent_collection}/{{{parent_entity}.id}}/{resolved_pattern}"
+        else:
+            return self._resolve_path_pattern(collection_name, element_entity, element_type)
+    
+    def _resolve_path_pattern(self, pattern: str, target_entity: str, target_type: Type) -> str:
+        """Resuelve placeholders con validación robusta"""
+        if '.' in pattern:
+            return pattern
+        
+        resolved = pattern
+        placeholders = PLACEHOLDER_PATTERN.findall(pattern)
+        
+        for placeholder in placeholders:
+            match placeholder:
+                case 'id':
+                    if not self._is_document_type(target_type):
+                        raise ValueError(
+                            f"Placeholder '{{id}}' usado para {target_entity} que es Embeddable. "
+                            f"Los Embeddables no tienen campo id."
+                        )
+                    resolved = resolved.replace('{id}', f'{{{target_entity}.id}}')
+                case _:
+                    self._validate_placeholder_field(placeholder, target_type, target_entity)
+                    resolved = resolved.replace(f'{{{placeholder}}}', f'{{{target_entity}.{placeholder}}}')
+        
+        return resolved
+    
+    def _validate_placeholder_field(self, placeholder: str, target_type: Type, target_entity: str):
+        """Valida que un placeholder existe como campo"""
+        if not hasattr(target_type, 'model_fields') or placeholder not in target_type.model_fields:
+            available_fields = list(target_type.model_fields.keys()) if hasattr(target_type, 'model_fields') else []
+            raise ValueError(
+                f"Placeholder '{{{placeholder}}}' no existe en {target_entity}. "
+                f"Campos disponibles: {available_fields}"
+            )
+    
+    def _determine_reference_field(self, placeholders: List[str]) -> str:
+        """Determina campo de referencia evitando 'id' si no existe"""
+        non_id_placeholders = [p for p in placeholders if p != PlaceholderKeys.ID]
+        return non_id_placeholders[0] if non_id_placeholders else PlaceholderKeys.ID
+    
+    def _is_document_type(self, model_class: Type[BaseModel]) -> bool:
+        """Verifica si tiene campo ID (es Document) con búsqueda optimizada"""
+        if not hasattr(model_class, 'model_fields'):
+            return False
+        
+        return any(
+            self._extract_field_metadata(field_info).get(MetadataKeys.ID, False)
+            for field_info in model_class.model_fields.values()
+        )
+    
+    def _extract_field_metadata(self, field_info) -> Dict[str, Any]:
+        """Extrae metadata de FieldInfo"""
+        if not hasattr(field_info, 'json_schema_extra') or not field_info.json_schema_extra:
+            return {}
+        return field_info.json_schema_extra.get('metadata', {})
+    
+    def _extract_base_type(self, annotation):
+        """Extrae tipo base manejando Optional"""
+        origin = get_origin(annotation)
+        if origin is Union:
+            args = get_args(annotation)
+            non_none_types = [arg for arg in args if arg is not type(None)]
+            return self._extract_base_type(non_none_types[0]) if non_none_types else annotation
+        else:
+            return annotation
+    
+    def _extract_list_element_type(self, annotation):
+        """Extrae tipo de elemento de contenedores"""
+        origin = get_origin(annotation)
+        if origin is Union:
+            args = get_args(annotation)
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            return self._extract_list_element_type(non_none_args[0]) if non_none_args else None
+        elif origin in CONTAINER_TYPES:
+            args = get_args(annotation)
+            return args[0] if args else None
+        else:
+            return None
+
+# ==================== TYPE ANALYZER (FIXED) ====================
+
+class TypeAnalyzer:
+    """Analizador de tipos con pattern matching optimizado - CORREGIDO"""
+    
+    @staticmethod
+    def detect_field_category(annotation) -> str:
+        """Detecta categoría del campo con pattern matching CORREGIDO"""
+        origin = get_origin(annotation)
+        
+        # Manejar Optional primero
+        if origin is Union:
+            args = get_args(annotation)
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            if len(non_none_args) == 1:
+                return TypeAnalyzer.detect_field_category(non_none_args[0])
+        
+        # ✅ CORRECCIÓN: Pattern matching con tipos reales, no strings
+        match origin:
+            case _ if origin is set:
+                return FieldCategories.SET
+            case _ if origin is list:
+                return FieldCategories.LIST
+            case _ if origin is tuple:
+                return FieldCategories.TUPLE
+            case _:
+                return TypeAnalyzer._analyze_direct_type(annotation)
+    
+    @staticmethod
+    def _analyze_direct_type(annotation) -> str:
+        """Analiza tipos directos con pattern matching corregido"""
+        if annotation in PRIMITIVE_TYPES:
+            return FieldCategories.PRIMITIVE
+        elif inspect.isclass(annotation) and issubclass(annotation, Enum):
+            return FieldCategories.ENUM
+        elif TypeAnalyzer.is_pydantic_model(annotation):
+            return FieldCategories.EMBEDDED
+        else:
+            return FieldCategories.UNKNOWN
+    
+    @staticmethod
+    def is_pydantic_model(type_class) -> bool:
+        """Verifica si es modelo Pydantic"""
+        return (inspect.isclass(type_class) and 
+                hasattr(type_class, 'model_fields') and 
+                issubclass(type_class, BaseModel))
+    
+    @staticmethod
+    def get_element_type_name(element_type) -> str:
+        """Obtiene nombre del tipo de elemento"""
+        if TypeAnalyzer.is_pydantic_model(element_type):
+            return element_type.__name__
+        elif element_type is not None:
+            return element_type.__name__.lower()
+        else:
+            return ElementTypes.UNKNOWN
+    
+    @staticmethod
+    def get_set_diff_strategy(element_type) -> str:
+        """Estrategia de diff para Set"""
+        return (DiffStrategies.BY_ID if TypeAnalyzer.is_pydantic_model(element_type) 
+                else DiffStrategies.SET_COMPARISON)
+
+# ==================== DEPENDENCY ANALYZER ====================
+
+class DependencyAnalyzer:
+    """Analizador de dependencias con clasificación correcta"""
+    
+    def __init__(self, all_models: Dict[str, Type[BaseModel]]):
+        self.all_models = all_models
+    
+    def extract_dependencies(self, properties: Dict[str, Any]) -> Dict[str, List[str]]:
+        """Extrae y clasifica dependencias"""
+        documents = set()
+        embeddables = set()
+        
+        for field_props in properties.values():
+            target_entities = self._extract_target_entities(field_props)
+            
+            for entity_name in target_entities:
+                target_model = self.all_models.get(entity_name)
+                
+                if target_model:
+                    if self._is_document_type(target_model):
+                        documents.add(entity_name)
+                    else:
+                        embeddables.add(entity_name)
+        
+        return {
+            SchemaKeys.DOCUMENTS: sorted(list(documents)),
+            SchemaKeys.EMBEDDABLES: sorted(list(embeddables))
+        }
+    
+    def _extract_target_entities(self, field_props: Dict[str, Any]) -> List[str]:
+        """Extrae entidades target de un campo"""
+        field_type = field_props.get(SchemaKeys.TYPE)
+        
+        match field_type:
+            case FieldTypes.REFERENCE:
+                target = field_props.get(SchemaKeys.REFERENCE_METADATA, {}).get(SchemaKeys.TARGET_ENTITY)
+                return [target] if target else []
+            
+            case FieldTypes.COLLECTION:
+                target = field_props.get(SchemaKeys.COLLECTION_METADATA, {}).get(SchemaKeys.ELEMENT_ENTITY)
+                return [target] if target else []
+            
+            case FieldTypes.OBJECT_ARRAY | FieldTypes.SET:
+                metadata = field_props.get(SchemaKeys.ARRAY_METADATA, {})
+                element_type = metadata.get(SchemaKeys.ELEMENT_TYPE)
+                return [element_type] if element_type and element_type not in EXCLUDED_METADATA_KEYS else []
+            
+            case _:
+                return []
+    
+    def _is_document_type(self, model_class: Type[BaseModel]) -> bool:
+        """Verifica si es Document (tiene campo ID)"""
+        for field_info in model_class.model_fields.values():
+            if not hasattr(field_info, 'json_schema_extra') or not field_info.json_schema_extra:
+                continue
+            metadata = field_info.json_schema_extra.get('metadata', {})
+            if metadata.get(MetadataKeys.ID):
+                return True
+        return False
+
+# ==================== MAIN GENERATOR ====================
 
 class DocumentSchemaGenerator:
-    """
-    Generador que analiza un modelo Pydantic y genera un esquema
-    completamente customizado en formato flat para optimización.
-    """
+    """Generador principal con arquitectura limpia"""
     
     def __init__(self):
         self.processed_entities: Set[str] = set()
         self.all_models: Dict[str, Type[BaseModel]] = {}
         self._current_entity: Optional[str] = None
+        self._field_processor: Optional[FieldProcessor] = None
+        self._dependency_analyzer: Optional[DependencyAnalyzer] = None
     
     def generate_schema(self, model_class: Type[BaseModel]) -> Dict[str, Any]:
-        """Genera esquema flat optimizado desde cero"""
-        # Resetear estado
+        """Genera esquema flat optimizado"""
+        self._initialize_generation(model_class)
+        
+        return {
+            model_name: self._process_entity_schema(model_cls)
+            for model_name, model_cls in self.all_models.items()
+            if model_name not in self.processed_entities
+        }
+    
+    def _initialize_generation(self, model_class: Type[BaseModel]):
+        """Inicializa el estado para generación"""
+        self._reset_state()
+        self._discover_all_models(model_class)
+        self._field_processor = FieldProcessor(self.all_models)
+        self._dependency_analyzer = DependencyAnalyzer(self.all_models)
+    
+    def _reset_state(self):
+        """Resetea estado del generador"""
         self.processed_entities.clear()
         self.all_models.clear()
-        
-        # Encontrar todos los modelos relacionados
-        self._discover_all_models(model_class)
-        
-        # Generar esquema flat
-        flat_schema = {}
-        
-        for model_name, model_cls in self.all_models.items():
-            if model_name not in self.processed_entities:
-                flat_schema[model_name] = self._process_entity_schema(model_cls)
-        
-        return flat_schema
+        self._current_entity = None
     
-    def _discover_all_models(self, model_class: Type[BaseModel], visited: Optional[Set] = None):
-        """Descubre recursivamente todos los modelos relacionados"""
+    def _discover_all_models(self, model_class: Type[BaseModel], visited: Optional[Set[str]] = None):
+        """Descubrimiento recursivo de modelos"""
         if visited is None:
             visited = set()
         
         model_name = model_class.__name__
-        
         if model_name in visited:
             return
         
         visited.add(model_name)
         self.all_models[model_name] = model_class
         
-        # Analizar campos para encontrar modelos relacionados
-        for field_name, field_info in model_class.model_fields.items():
-            related_models = self._extract_related_models(field_info.annotation)
-            
-            for related_model in related_models:
-                if inspect.isclass(related_model) and hasattr(related_model, 'model_fields') and issubclass(related_model, BaseModel):
+        # Buscar modelos relacionados
+        for field_info in model_class.model_fields.values():
+            for related_model in self._extract_related_models(field_info.annotation):
+                if TypeAnalyzer.is_pydantic_model(related_model):
                     self._discover_all_models(related_model, visited)
     
     def _extract_related_models(self, annotation) -> List[Type]:
-        """Extrae tipos de modelos relacionados de una anotación de tipo"""
+        """Extrae modelos relacionados"""
         models = []
+        origin = get_origin(annotation)
         
-        # Manejar Union (Optional)
-        if get_origin(annotation) is Union:
-            for arg in get_args(annotation):
-                if arg is not type(None):
-                    models.extend(self._extract_related_models(arg))
-        
-        # Manejar List, Set, etc.
-        elif hasattr(annotation, '__origin__') and get_origin(annotation) in (list, set, tuple):
+        if origin is Union:
+            non_none_args = [arg for arg in get_args(annotation) if arg is not type(None)]
+            for arg in non_none_args:
+                models.extend(self._extract_related_models(arg))
+        elif origin in CONTAINER_TYPES:
             args = get_args(annotation)
             if args:
                 models.extend(self._extract_related_models(args[0]))
-        
-        # Modelo directo
-        elif (inspect.isclass(annotation) and 
-              hasattr(annotation, 'model_fields') and 
-              issubclass(annotation, BaseModel)):
-            models.append(annotation)
+        else:
+            if TypeAnalyzer.is_pydantic_model(annotation):
+                models.append(annotation)
         
         return models
     
-    def _process_entity_schema(self, model_class: Type[BaseModel]) -> Dict:
-        """Procesa esquema de una entidad individual"""
+    def _process_entity_schema(self, model_class: Type[BaseModel]) -> Dict[str, Any]:
+        """Procesa esquema de entidad individual"""
         model_name = model_class.__name__
         
         if model_name in self.processed_entities:
             return {}
         
         self.processed_entities.add(model_name)
-        
-        # Guardar entidad actual para uso en path resolution
         self._current_entity = model_name
         
-        properties = {}
+        # Procesar campos
+        properties = {
+            field_name: self._process_field_schema(field_name, field_info, model_class)
+            for field_name, field_info in model_class.model_fields.items()
+        }
         
-        # Procesar cada campo
-        for field_name, field_info in model_class.model_fields.items():
-            properties[field_name] = self._process_field_schema(
-                field_name, field_info, model_class
-            )
-        
-        # Generar entity_metadata
+        # Generar metadata
         entity_metadata = self._generate_entity_metadata(model_class, properties)
         
-        return {
-            "properties": properties,
-            "entity_metadata": entity_metadata
-        }
+        return SchemaBuilder.build_entity_schema(properties, entity_metadata)
     
-    def _process_field_schema(self, field_name: str, field_info, model_class: Type[BaseModel]) -> Dict:
-        """Procesa esquema de un campo individual"""
-        
-        # Extraer metadata si existe
+    def _process_field_schema(self, field_name: str, field_info, model_class: Type[BaseModel]) -> Dict[str, Any]:
+        """Procesa campo individual con pattern matching corregido"""
         metadata = self._extract_field_metadata(field_info)
         
-        if metadata.get('id'):
-            return {
-                "type": "id",
-                "strategy": "id_field"
-            }
-        
-        elif metadata.get('geopoint'):
-            return {
-                "type": "geopoint",
-                "strategy": "geopoint_value"
-            }
-        
-        elif metadata.get('reference'):
-            return self._process_reference_field(field_info, metadata)
-        
-        elif metadata.get('collection'):
-            return self._process_collection_field(field_name, field_info, metadata)
-        
+        if metadata.get(MetadataKeys.ID):
+            return SchemaBuilder.build_basic_schema(FieldTypes.ID, Strategies.ID_FIELD)
+        elif metadata.get(MetadataKeys.GEOPOINT):
+            return SchemaBuilder.build_basic_schema(FieldTypes.GEOPOINT, Strategies.GEOPOINT_VALUE)
+        elif metadata.get(MetadataKeys.REFERENCE):
+            return self._field_processor.process_reference_field(field_info, metadata)
+        elif metadata.get(MetadataKeys.COLLECTION):
+            return self._field_processor.process_collection_field(field_name, field_info, metadata, self._current_entity)
         else:
             return self._process_regular_field(field_info)
     
-    def _extract_field_metadata(self, field_info) -> Dict:
-        """Extrae metadata de un FieldInfo"""
-        if not hasattr(field_info, 'json_schema_extra') or not field_info.json_schema_extra:
-            return {}
-        
-        return field_info.json_schema_extra.get('metadata', {})
-    
-    def _process_reference_field(self, field_info, metadata: Dict) -> Dict:
-        """Procesa campo reference"""
-        # Extraer tipo target
-        annotation = field_info.annotation
-        target_type = self._extract_base_type(annotation)
-        target_entity = target_type.__name__ if target_type else 'Unknown'
-        
-        collection_name = metadata.get('collection_name')
-        
-        if collection_name:
-            path_resolver = self._resolve_path_pattern(collection_name, target_entity)
-        else:
-            # Inferir del nombre de la entidad con pluralización correcta
-            path_resolver = f"{self._pluralize(target_entity.lower())}/{{{target_entity}.id}}"
-        
-        return {
-            "type": "reference",
-            "strategy": "reference_path",
-            "reference_metadata": {
-                "target_entity": target_entity,
-                "path_resolver": path_resolver
-            }
-        }
-    
-    def _process_collection_field(self, field_name: str, field_info, metadata: Dict) -> Dict:
-        """Procesa campo collection"""
-        # Extraer tipo de elemento
-        annotation = field_info.annotation
-        element_type = self._extract_list_element_type(annotation)
-        element_entity = element_type.__name__ if element_type else 'Unknown'
-        
-        collection_name = metadata.get('collection_name')
-        
-        if collection_name:
-            # Patrón específico con dot notation y path completo
-            parent_entity = self._get_current_entity_name()
-            if not collection_name.startswith(self._pluralize(parent_entity.lower())):
-                # Añadir path del padre si no está presente
-                path_pattern = f"{self._pluralize(parent_entity.lower())}/{{{parent_entity}.id}}/{self._resolve_path_pattern(collection_name, element_entity)}"
-            else:
-                path_pattern = self._resolve_path_pattern(collection_name, element_entity)
-            
-            placeholders = re.findall(r'\{([^}]+)\}', collection_name)
-            reference_field = next((p.split('.')[-1] for p in placeholders if p != 'id' and '.' in p), 'id')
-            if reference_field == 'id':
-                reference_field = next((p for p in placeholders if p != 'id'), 'id')
-        else:
-            # Patrón por defecto usando nombre del field con dot notation
-            parent_entity = self._get_current_entity_name()
-            path_pattern = f"{self._pluralize(parent_entity.lower())}/{{{parent_entity}.id}}/{field_name}/{{{element_entity}.id}}"
-            reference_field = "id"
-        
-        return {
-            "type": "collection",
-            "strategy": "collection_with_paths",
-            "collection_metadata": {
-                "element_entity": element_entity,
-                "path_pattern": path_pattern,
-                "reference_field": reference_field,
-                "diff_strategy": "by_id"
-            }
-        }
-    
-    def _process_regular_field(self, field_info) -> Dict:
+    def _process_regular_field(self, field_info) -> Dict[str, Any]:
         """Procesa campos regulares"""
         annotation = field_info.annotation
+        field_category = TypeAnalyzer.detect_field_category(annotation)
         
-        # PRIMERO verificar si es array/collection antes que el tipo base
-        if self._is_set_type(annotation):
-            return self._process_set_field(annotation)
+        match field_category:
+            case FieldCategories.SET:
+                return self._build_set_schema(annotation)
+            case FieldCategories.LIST:
+                return self._build_list_schema(annotation)
+            case FieldCategories.TUPLE:
+                return SchemaBuilder.build_tuple_schema()
+            case FieldCategories.PRIMITIVE:
+                return SchemaBuilder.build_basic_schema(FieldTypes.PRIMITIVE, Strategies.DIRECT)
+            case FieldCategories.ENUM:
+                return SchemaBuilder.build_basic_schema(FieldTypes.ENUM, Strategies.DIRECT)
+            case FieldCategories.EMBEDDED:
+                return SchemaBuilder.build_basic_schema(FieldTypes.EMBEDDED, Strategies.DIRECT)
+            case _:
+                return SchemaBuilder.build_basic_schema(FieldTypes.UNKNOWN, Strategies.DIRECT)
+    
+    def _build_set_schema(self, annotation) -> Dict[str, Any]:
+        """Schema para Set"""
+        element_type = self._field_processor._extract_list_element_type(annotation)
+        element_name = TypeAnalyzer.get_element_type_name(element_type)
+        diff_strategy = TypeAnalyzer.get_set_diff_strategy(element_type)
         
-        elif self._is_list_type(annotation):
-            return self._process_list_field(annotation)
+        return SchemaBuilder.build_array_schema(FieldTypes.SET, element_name, diff_strategy)
+    
+    def _build_list_schema(self, annotation) -> Dict[str, Any]:
+        """Schema para List"""
+        element_type = self._field_processor._extract_list_element_type(annotation)
         
-        elif self._is_tuple_type(annotation):
-            return self._process_tuple_field(annotation)
-        
-        # DESPUÉS extraer tipo base para primitivos
-        base_type = self._extract_base_type(annotation)
-        
-        if base_type == str:
-            return {
-                "type": "primitive",
-                "strategy": "direct"
-            }
-        
-        elif base_type in [int, float, bool]:
-            return {
-                "type": "primitive", 
-                "strategy": "direct"
-            }
-        
-        elif inspect.isclass(base_type) and issubclass(base_type, Enum):
-            return {
-                "type": "enum",
-                "strategy": "direct"
-            }
-        
-        elif inspect.isclass(base_type) and hasattr(base_type, 'model_fields') and issubclass(base_type, BaseModel):
-            return {
-                "type": "embedded",
-                "strategy": "direct"
-            }
-        
+        if element_type in PRIMITIVE_TYPES:
+            return SchemaBuilder.build_array_schema(
+                FieldTypes.SIMPLE_ARRAY, 
+                element_type.__name__.lower(), 
+                DiffStrategies.ARRAY_OPERATIONS
+            )
+        elif TypeAnalyzer.is_pydantic_model(element_type):
+            return SchemaBuilder.build_array_schema(
+                FieldTypes.OBJECT_ARRAY, 
+                element_type.__name__, 
+                DiffStrategies.BY_ID
+            )
         else:
-            return {
-                "type": "unknown",
-                "strategy": "direct"
-            }
+            return SchemaBuilder.build_basic_schema(FieldTypes.SIMPLE_ARRAY, Strategies.DIRECT_ARRAY)
     
-    def _process_list_field(self, annotation) -> Dict:
-        """Procesa campos List"""
-        element_type = self._extract_list_element_type(annotation)
-        
-        if element_type in [str, int, float, bool]:
-            return {
-                "type": "simple_array",
-                "strategy": "direct_array",
-                "array_metadata": {
-                    "element_type": element_type.__name__.lower(),
-                    "diff_strategy": "array_operations"
-                }
-            }
-        elif inspect.isclass(element_type) and hasattr(element_type, 'model_fields') and issubclass(element_type, BaseModel):
-            return {
-                "type": "object_array",
-                "strategy": "direct_array",
-                "array_metadata": {
-                    "element_type": element_type.__name__,
-                    "diff_strategy": "by_id"
-                }
-            }
-        else:
-            return {
-                "type": "simple_array",
-                "strategy": "direct_array"
-            }
-    
-    def _process_set_field(self, annotation) -> Dict:
-        """Procesa campos Set"""
-        element_type = self._extract_list_element_type(annotation)  # Set usa misma lógica
-        
-        if inspect.isclass(element_type) and hasattr(element_type, 'model_fields') and issubclass(element_type, BaseModel):
-            return {
-                "type": "set",
-                "strategy": "direct_array",
-                "array_metadata": {
-                    "element_type": element_type.__name__,
-                    "diff_strategy": "set_comparison"
-                }
-            }
-        else:
-            return {
-                "type": "set",
-                "strategy": "direct_array",
-                "array_metadata": {
-                    "element_type": element_type.__name__.lower() if element_type else "unknown",
-                    "diff_strategy": "set_comparison"
-                }
-            }
-    
-    def _process_tuple_field(self, annotation) -> Dict:
-        """Procesa campos Tuple"""
-        return {
-            "type": "tuple",
-            "strategy": "direct",
-            "array_metadata": {
-                "element_type": "mixed",
-                "diff_strategy": "direct_comparison"
-            }
-        }
-    
-    def _generate_entity_metadata(self, model_class: Type[BaseModel], properties: Dict) -> Dict:
-        """Genera metadata de la entidad"""
+    def _generate_entity_metadata(self, model_class: Type[BaseModel], properties: Dict[str, Any]) -> Dict[str, Any]:
+        """Genera metadata de entidad con construcción optimizada"""
         model_name = model_class.__name__
+        id_field = self._find_id_field(properties)
+        entity_type = EntityTypes.DOCUMENT if id_field else EntityTypes.EMBEDDABLE
         
-        # Determinar si es Document (buscar campo id)
-        id_field = None
-        for field_name, field_props in properties.items():
-            if field_props.get('type') == 'id':
-                id_field = field_name
-                break
-        
-        is_document = id_field is not None
-        
-        # Encontrar campos especiales
-        collection_fields = []
-        geopoint_fields = []
-        
-        for field_name, field_props in properties.items():
-            if field_props.get('type') == 'collection':
-                collection_fields.append(field_name)
-            elif field_props.get('type') == 'geopoint':
-                geopoint_fields.append(field_name)
-        
-        has_collections = len(collection_fields) > 0
-        
-        # Inferir nombre de colección con pluralización correcta
-        collection_name = self._pluralize(model_name.lower()) if is_document else None
-        
-        # Extraer dependencias
-        dependencies = self._extract_dependencies(properties)
-        
-        # Construir metadata
+        # Metadata base
         metadata = {
-            "is_document": is_document,
-            "has_collections": has_collections,
-            "entity_name": model_name
+            SchemaKeys.TYPE: entity_type,
+            SchemaKeys.ENTITY_NAME: model_name
         }
         
-        if id_field:
-            metadata["id_field"] = id_field
+        # Añadir campos específicos para Document
+        if entity_type == EntityTypes.DOCUMENT:
+            metadata.update({
+                SchemaKeys.ID_FIELD: id_field,
+                SchemaKeys.COLLECTION_NAME: plural(model_name.lower())
+            })
         
-        if collection_name:
-            metadata["collection_name"] = collection_name
-        
-        if collection_fields:
-            metadata["collection_fields"] = collection_fields
-        
-        if geopoint_fields:
-            metadata["geopoint_fields"] = geopoint_fields
-        
-        if dependencies["documents"] or dependencies["embeddables"]:
-            metadata["dependencies"] = dependencies
+        # Añadir dependencias si existen
+        dependencies = self._dependency_analyzer.extract_dependencies(properties)
+        if dependencies[SchemaKeys.DOCUMENTS] or dependencies[SchemaKeys.EMBEDDABLES]:
+            metadata[SchemaKeys.DEPENDENCIES] = dependencies
         
         return metadata
     
-    def _extract_dependencies(self, properties: Dict) -> Dict[str, List[str]]:
-        """Extrae dependencias de documentos y embeddables"""
-        documents = set()
-        embeddables = set()
-        
+    def _find_id_field(self, properties: Dict[str, Any]) -> Optional[str]:
+        """Encuentra campo ID"""
         for field_name, field_props in properties.items():
-            field_type = field_props.get('type')
-            
-            if field_type == 'reference':
-                target = field_props.get('reference_metadata', {}).get('target_entity')
-                if target:
-                    documents.add(target)
-            
-            elif field_type == 'collection':
-                target = field_props.get('collection_metadata', {}).get('element_entity')
-                if target:
-                    documents.add(target)
-            
-            elif field_type in ['object_array', 'set']:
-                metadata = field_props.get('array_metadata', {})
-                element_type = metadata.get('element_type')
-                if element_type and element_type not in ['string', 'integer', 'number', 'boolean']:
-                    # Asumir documento si no es primitivo
-                    documents.add(element_type)
-            
-            elif field_type == 'embedded':
-                # Por determinar si es documento o embeddable
-                # Por ahora dejarlo en embeddables
-                pass
-        
-        return {
-            "documents": sorted(list(documents)),
-            "embeddables": sorted(list(embeddables))
-        }
-    
-    # ==================== NUEVAS UTILIDADES ====================
-    
-    def _get_current_entity_name(self) -> str:
-        """Obtiene el nombre de la entidad actual siendo procesada"""
-        return self._current_entity or "Unknown"
-    
-    def _resolve_path_pattern(self, pattern: str, target_entity: str) -> str:
-        """Resuelve un patrón de path con dot notation"""
-        # Convertir {field} a {EntityName.field}
-        resolved = pattern
-        
-        # Si ya tiene dot notation, no modificar
-        if '.' in pattern:
-            return pattern
-            
-        # Convertir placeholders simples a dot notation
-        placeholders = re.findall(r'\{([^}]+)\}', pattern)
-        for placeholder in placeholders:
-            if placeholder == 'id':
-                # {id} se refiere al target entity
-                resolved = resolved.replace('{id}', f'{{{target_entity}.id}}')
-            elif placeholder == 'name':
-                # {name} se refiere al target entity
-                resolved = resolved.replace('{name}', f'{{{target_entity}.name}}')
-            # Otros placeholders se asume que son del target entity
-            elif '.' not in placeholder:
-                resolved = resolved.replace(f'{{{placeholder}}}', f'{{{target_entity}.{placeholder}}}')
-        
-        return resolved
-    
-    def _pluralize(self, word: str) -> str:
-        """Pluralización simple en inglés"""
-        if word.endswith('y'):
-            return word[:-1] + 'ies'
-        elif word.endswith(('s', 'sh', 'ch', 'x', 'z')):
-            return word + 'es'
-        else:
-            return word + 's'
-    
-    # ==================== UTILIDADES DE TIPOS CORREGIDAS ====================
-    
-    def _extract_base_type(self, annotation):
-        """Extrae el tipo base de una anotación (sin Optional, List, etc.)"""
-        # Manejar Union (Optional)
-        if get_origin(annotation) is Union:
-            args = get_args(annotation)
-            for arg in args:
-                if arg is not type(None):
-                    return self._extract_base_type(arg)
-        
-        # NO manejar contenedores aquí - eso se hace en _process_regular_field
-        # Solo devolver el tipo directo
-        return annotation
-    
-    def _extract_list_element_type(self, annotation):
-        """Extrae tipo de elemento de List/Set con mejor detección"""
-        # Manejar Optional[List[T]] o Optional[Set[T]]
-        if get_origin(annotation) is Union:
-            args = get_args(annotation)
-            for arg in args:
-                if arg is not type(None):
-                    return self._extract_list_element_type(arg)
-        
-        # Manejar List[T], Set[T], etc.
-        if get_origin(annotation) in (list, set, tuple):
-            args = get_args(annotation)
-            if args:
-                element_type = args[0]
-                # Verificar que sea un tipo válido
-                if inspect.isclass(element_type):
-                    return element_type
-                # Si no es clase, puede ser tipo primitivo
-                return element_type
-        
+            if field_props.get(SchemaKeys.TYPE) == FieldTypes.ID:
+                return field_name
         return None
     
-    def _is_list_type(self, annotation) -> bool:
-        """Verifica si es tipo List (incluyendo Optional[List])"""
-        # Manejar Optional[List[T]]
-        if get_origin(annotation) is Union:
-            args = get_args(annotation)
-            for arg in args:
-                if arg is not type(None) and get_origin(arg) is list:
-                    return True
-        
-        # List directo
-        return get_origin(annotation) is list
-    
-    def _is_set_type(self, annotation) -> bool:
-        """Verifica si es tipo Set (incluyendo Optional[Set])"""
-        # Manejar Optional[Set[T]]
-        if get_origin(annotation) is Union:
-            args = get_args(annotation)
-            for arg in args:
-                if arg is not type(None) and get_origin(arg) is set:
-                    return True
-        
-        # Set directo
-        return get_origin(annotation) is set
-    
-    def _is_tuple_type(self, annotation) -> bool:
-        """Verifica si es tipo Tuple (incluyendo Optional[Tuple])"""
-        # Manejar Optional[Tuple[T]]
-        if get_origin(annotation) is Union:
-            args = get_args(annotation)
-            for arg in args:
-                if arg is not type(None) and get_origin(arg) is tuple:
-                    return True
-        
-        # Tuple directo
-        return get_origin(annotation) is tuple
+    def _extract_field_metadata(self, field_info) -> Dict[str, Any]:
+        """Extrae metadata de FieldInfo"""
+        if not hasattr(field_info, 'json_schema_extra') or not field_info.json_schema_extra:
+            return {}
+        return field_info.json_schema_extra.get('metadata', {})
 
 
-# Función helper para usar fácilmente
+# ==================== HELPER FUNCTION ====================
+
 def generate_flat_schema(model_class: Type[BaseModel]) -> Dict[str, Any]:
-    """Función helper para generar esquema flat"""
+    """Función helper optimizada"""
     generator = DocumentSchemaGenerator()
     return generator.generate_schema(model_class)

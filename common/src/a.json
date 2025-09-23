@@ -3,11 +3,11 @@
     "properties": {
       "id": {
         "type": "id",
-        "strategy": "id_field"      
+        "strategy": "id_field"
       },
       "name": {
-        "type": "primitive",        
-        "strategy": "direct"        
+        "type": "primitive",
+        "strategy": "direct"
       },
       "location": {
         "type": "geopoint",
@@ -55,18 +55,10 @@
       }
     },
     "entity_metadata": {
-      "is_document": true,
-      "has_collections": true,
+      "type": "document",
       "entity_name": "Store",
       "id_field": "id",
       "collection_name": "stores",
-      "collection_fields": [
-        "products",
-        "categories"
-      ],
-      "geopoint_fields": [
-        "location"
-      ],
       "dependencies": {
         "documents": [
           "Category",
@@ -103,7 +95,7 @@
         "strategy": "direct_array",
         "array_metadata": {
           "element_type": "Tag",
-          "diff_strategy": "set_comparison"
+          "diff_strategy": "by_id"
         }
       },
       "coordinates": {
@@ -116,14 +108,10 @@
       }
     },
     "entity_metadata": {
-      "is_document": true,
-      "has_collections": false,
+      "type": "document",
       "entity_name": "Product",
       "id_field": "id",
       "collection_name": "products",
-      "geopoint_fields": [
-        "coordinates"
-      ],
       "dependencies": {
         "documents": [
           "Category",
@@ -149,8 +137,7 @@
       }
     },
     "entity_metadata": {
-      "is_document": true,
-      "has_collections": false,
+      "type": "document",
       "entity_name": "Category",
       "id_field": "id",
       "collection_name": "categories"
@@ -172,8 +159,7 @@
       }
     },
     "entity_metadata": {
-      "is_document": true,
-      "has_collections": false,
+      "type": "document",
       "entity_name": "Tag",
       "id_field": "id",
       "collection_name": "tags"
