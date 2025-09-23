@@ -1,23 +1,30 @@
 from enum import Enum
-from common.infrastructure import Document,reference,geopoint,collection
-from typing import Set,List,Tuple, Union
-from pydantic import BaseModel
+from common.infrastructure import Document, reference, geopoint, collection
+from typing import Set, List, Tuple, Union
+from common.infrastructure.document_schema_generator import (
+    DocumentSchemaGenerator,
+    generate_flat_schema,
+)
+
+from pydantic.json_schema import GenerateJsonSchema
+
 import json
-def entity(cls:BaseModel):
-    print(json.dumps(cls.model_json_schema()))
-    return cls
+
 
 class Status(Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
 
+
 class Category(Document):
     name: str
     description: str
 
+
 class Tag(Document):
     name: str
     color: str
+
 
 class Product(Document):
     name: str
@@ -27,7 +34,7 @@ class Product(Document):
     coordinates: Union[tuple, dict] = geopoint()  # Acepta tuple o dict
     status: Status
 
-@entity
+
 class Store(Document):
     name: str
     location: Union[tuple, dict] = geopoint()
@@ -36,3 +43,10 @@ class Store(Document):
     region: str
     phone_numbers: List[str] = []  # Lista simple
     operating_hours: Tuple[int, int] = (9, 18)  # Tuple simple
+
+
+#result = Store.model_json_schema(schema_generator=DocumentSchemaGenerator)
+
+result = generate_flat_schema(Store)
+
+print(json.dumps(result,indent=2))

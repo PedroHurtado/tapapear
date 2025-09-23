@@ -1,219 +1,182 @@
 {
-  "$defs": {
-    "Category": {
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "metadata": {
-            "id": true
-          },
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "description": {
-          "title": "Description",
-          "type": "string"
+  "Store": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"      
+      },
+      "name": {
+        "type": "primitive",        
+        "strategy": "direct"        
+      },
+      "location": {
+        "type": "geopoint",
+        "strategy": "geopoint_value"
+      },
+      "products": {
+        "type": "collection",
+        "strategy": "collection_with_paths",
+        "collection_metadata": {
+          "element_entity": "Product",
+          "path_pattern": "stores/{Store.id}/products/{Product.id}",
+          "reference_field": "id",
+          "diff_strategy": "by_id"
         }
       },
-      "required": [
-        "name",
-        "description"
-      ],
-      "title": "Category",
-      "type": "object"
-    },
-    "Product": {
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "metadata": {
-            "id": true
-          },
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "price": {
-          "title": "Price",
-          "type": "number"
-        },
-        "category": {
-          "$ref": "#/$defs/Category",
-          "metadata": {
-            "collection_name": null,
-            "reference": true
-          }
-        },
-        "tags": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/Tag"
-          },
-          "title": "Tags",
-          "type": "array",
-          "uniqueItems": true
-        },
-        "coordinates": {
-          "anyOf": [
-            {
-              "items": {},
-              "type": "array"
-            },
-            {
-              "additionalProperties": true,
-              "type": "object"
-            }
-          ],
-          "metadata": {
-            "geopoint": true
-          },
-          "title": "Coordinates"
-        },
-        "status": {
-          "$ref": "#/$defs/Status"
+      "categories": {
+        "type": "collection",
+        "strategy": "collection_with_paths",
+        "collection_metadata": {
+          "element_entity": "Category",
+          "path_pattern": "stores/{Store.id}/categories/{Category.name}",
+          "reference_field": "name",
+          "diff_strategy": "by_id"
         }
       },
-      "required": [
-        "name",
-        "price",
-        "category",
-        "coordinates",
-        "status"
-      ],
-      "title": "Product",
-      "type": "object"
-    },
-    "Status": {
-      "enum": [
-        "active",
-        "inactive"
-      ],
-      "title": "Status",
-      "type": "string"
-    },
-    "Tag": {
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "metadata": {
-            "id": true
-          },
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "color": {
-          "title": "Color",
-          "type": "string"
+      "region": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "phone_numbers": {
+        "type": "simple_array",
+        "strategy": "direct_array",
+        "array_metadata": {
+          "element_type": "str",
+          "diff_strategy": "array_operations"
         }
       },
-      "required": [
-        "name",
-        "color"
+      "operating_hours": {
+        "type": "tuple",
+        "strategy": "direct",
+        "array_metadata": {
+          "element_type": "mixed",
+          "diff_strategy": "direct_comparison"
+        }
+      }
+    },
+    "entity_metadata": {
+      "is_document": true,
+      "has_collections": true,
+      "entity_name": "Store",
+      "id_field": "id",
+      "collection_name": "stores",
+      "collection_fields": [
+        "products",
+        "categories"
       ],
-      "title": "Tag",
-      "type": "object"
+      "geopoint_fields": [
+        "location"
+      ],
+      "dependencies": {
+        "documents": [
+          "Category",
+          "Product"
+        ],
+        "embeddables": []
+      }
     }
   },
-  "properties": {
-    "id": {
-      "format": "uuid",
-      "metadata": {
-        "id": true
+  "Product": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
       },
-      "title": "Id",
-      "type": "string"
-    },
-    "name": {
-      "title": "Name",
-      "type": "string"
-    },
-    "location": {
-      "anyOf": [
-        {
-          "items": {},
-          "type": "array"
-        },
-        {
-          "additionalProperties": true,
-          "type": "object"
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "price": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "category": {
+        "type": "reference",
+        "strategy": "reference_path",
+        "reference_metadata": {
+          "target_entity": "Category",
+          "path_resolver": "categories/{Category.id}"
         }
-      ],
-      "metadata": {
-        "geopoint": true
       },
-      "title": "Location"
-    },
-    "products": {
-      "items": {
-        "$ref": "#/$defs/Product"
-      },
-      "metadata": {
-        "collection": true,
-        "collection_name": null
-      },
-      "title": "Products",
-      "type": "array"
-    },
-    "categories": {
-      "items": {
-        "$ref": "#/$defs/Category"
-      },
-      "metadata": {
-        "collection": true,
-        "collection_name": "categories/{name}"
-      },
-      "title": "Categories",
-      "type": "array"
-    },
-    "region": {
-      "title": "Region",
-      "type": "string"
-    },
-    "phone_numbers": {
-      "default": [],
-      "items": {
-        "type": "string"
-      },
-      "title": "Phone Numbers",
-      "type": "array"
-    },
-    "operating_hours": {
-      "default": [
-        9,
-        18
-      ],
-      "maxItems": 2,
-      "minItems": 2,
-      "prefixItems": [
-        {
-          "type": "integer"
-        },
-        {
-          "type": "integer"
+      "tags": {
+        "type": "set",
+        "strategy": "direct_array",
+        "array_metadata": {
+          "element_type": "Tag",
+          "diff_strategy": "set_comparison"
         }
+      },
+      "coordinates": {
+        "type": "geopoint",
+        "strategy": "geopoint_value"
+      },
+      "status": {
+        "type": "enum",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "is_document": true,
+      "has_collections": false,
+      "entity_name": "Product",
+      "id_field": "id",
+      "collection_name": "products",
+      "geopoint_fields": [
+        "coordinates"
       ],
-      "title": "Operating Hours",
-      "type": "array"
+      "dependencies": {
+        "documents": [
+          "Category",
+          "Tag"
+        ],
+        "embeddables": []
+      }
     }
   },
-  "required": [
-    "name",
-    "location",
-    "products",
-    "categories",
-    "region"
-  ],
-  "title": "Store",
-  "type": "object"
+  "Category": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "description": {
+        "type": "primitive",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "is_document": true,
+      "has_collections": false,
+      "entity_name": "Category",
+      "id_field": "id",
+      "collection_name": "categories"
+    }
+  },
+  "Tag": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "color": {
+        "type": "primitive",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "is_document": true,
+      "has_collections": false,
+      "entity_name": "Tag",
+      "id_field": "id",
+      "collection_name": "tags"
+    }
+  }
 }

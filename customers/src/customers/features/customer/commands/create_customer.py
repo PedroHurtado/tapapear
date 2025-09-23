@@ -11,8 +11,6 @@ from customers.infrastructure.customer import RepositoryCustomer
 router = build_router("customers")
 
 
-
-
 class Request(Command):
     name: str
 
@@ -40,11 +38,12 @@ class Service(CommandHadler[Request]):
         customer = Customer.create(
             get_id(), req.name, "", "", "", get_now(), 200, tax_type, "52"
         )        
+        
         await self._repository.create(customer)
         return self._mapper.to(Response).map(customer)
 
 
-@router.post("", status_code=201, summary="Create Customer pirolino")
+@router.post("", status_code=201, summary="Create Customer")
 @inject
 async def controller(req: Request, mediator: Mediator = deps(Mediator)) -> Response:
     return await mediator.send(req)
