@@ -6,7 +6,7 @@ from common.infrastructure.document_schema_generator import (
     generate_flat_schema,
 )
 
-from common.infrastructure.entity_decorator import entity
+from common.infrastructure.agregate_root import agregate_root
 
 from pydantic.json_schema import GenerateJsonSchema
 
@@ -36,7 +36,7 @@ class Product(Document):
     coordinates: Union[tuple, dict] = geopoint()  # Acepta tuple o dict
     status: Status
 
-@entity
+@agregate_root
 class Store(Document):
     name: str
     location: Union[tuple, dict] = geopoint()

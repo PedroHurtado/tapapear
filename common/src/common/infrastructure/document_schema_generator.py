@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Set, get_args, get_origin, Union, Type
 from pydantic import BaseModel
 from common.inflect import plural
+from .document import Document
 from enum import Enum
 import inspect
 import re
@@ -108,6 +109,14 @@ class SchemaBuilder:
     @staticmethod
     def build_basic_schema(field_type: str, strategy: str) -> Dict[str, str]:
         return {SchemaKeys.TYPE: field_type, SchemaKeys.STRATEGY: strategy}
+
+    @staticmethod
+    def build_geppoint_schema(field_type: str, strategy: str) -> Dict[str, str]:
+        return {
+            SchemaKeys.TYPE: field_type,
+            SchemaKeys.STRATEGY: strategy,
+            SchemaKeys.DIFF_STRATEGY: DiffStrategies.BY_OBJECT_EQUALITY,
+        }
 
     @staticmethod
     def build_reference_schema(
@@ -633,7 +642,7 @@ class DocumentSchemaGenerator:
         if metadata.get(MetadataKeys.ID):
             return SchemaBuilder.build_basic_schema(FieldTypes.ID, Strategies.ID_FIELD)
         elif metadata.get(MetadataKeys.GEOPOINT):
-            return SchemaBuilder.build_basic_schema(
+            return SchemaBuilder.build_geppoint_schema(
                 FieldTypes.GEOPOINT, Strategies.GEOPOINT_VALUE
             )
         elif metadata.get(MetadataKeys.REFERENCE):
@@ -679,22 +688,24 @@ class DocumentSchemaGenerator:
     def _build_set_schema(self, annotation) -> Dict[str, Any]:
         element_type = self._field_processor._extract_list_element_type(annotation)
         element_name = TypeAnalyzer.get_element_type_name(element_type)
-    
-        return SchemaBuilder.build_complex_array_schema(FieldTypes.SET, element_name, DiffStrategies.BY_OBJECT_EQUALITY)
+
+        return SchemaBuilder.build_complex_array_schema(
+            FieldTypes.SET, element_name, DiffStrategies.BY_OBJECT_EQUALITY
+        )
 
     def _build_list_schema(self, annotation) -> Dict[str, Any]:
         """✅ FIXED: Schema para List - simple_array limpio, object_array con by_object_equality"""
         element_type = self._field_processor._extract_list_element_type(annotation)
-        
+
         if element_type in PRIMITIVE_TYPES:
             # ✅ FIXED: simple_array con schema limpio (sin array_metadata)
             return SchemaBuilder.build_simple_array_schema(FieldTypes.SIMPLE_ARRAY)
         elif TypeAnalyzer.is_pydantic_model(element_type):
             # ✅ FIXED: object_array con by_object_equality
             return SchemaBuilder.build_complex_array_schema(
-                FieldTypes.OBJECT_ARRAY, 
-                element_type.__name__, 
-                DiffStrategies.BY_OBJECT_EQUALITY
+                FieldTypes.OBJECT_ARRAY,
+                element_type.__name__,
+                DiffStrategies.BY_OBJECT_EQUALITY,
             )
         else:
             return SchemaBuilder.build_simple_array_schema(FieldTypes.SIMPLE_ARRAY)

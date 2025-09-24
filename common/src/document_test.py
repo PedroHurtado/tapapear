@@ -6,22 +6,23 @@ from enum import Enum
 from uuid import uuid4
 
 from common.infrastructure import Document,reference,collection,geopoint
-from common.infrastructure.entity_decorator import entity
+from common.infrastructure.agregate_root import agregate_root
+from pydantic import ConfigDict
 # ===== MODELO DE DATOS =====
 
 class Status(Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
 
-@entity
+
 class Category(Document):
     name: str
     description: str
-@entity
+
 class Tag(Document):
     name: str
     color: str
-@entity
+
 class Product(Document):
     name: str
     price: float
@@ -30,7 +31,7 @@ class Product(Document):
     coordinates: Union[tuple, dict] = geopoint()  # Acepta tuple o dict
     status: Status
 
-@entity
+@agregate_root
 class Store(Document):
     name: str
     location: dict = geopoint()
@@ -39,6 +40,7 @@ class Store(Document):
     region: str
     phone_numbers: List[str] = []  # Lista simple
     operating_hours: Tuple[int, int] = (9, 18)  # Tuple simple
+   
 
 # ===== CARGA DE DATOS =====
 
@@ -103,11 +105,11 @@ def run_test():
     store = create_test_data()
     
     
-    print(json.dumps(Store.__document_schema__, indent=2, ensure_ascii=False))
+    #print(json.dumps(Store.__document_schema__, indent=2, ensure_ascii=False))
 
     #print("\n📦 SERIALIZANDO...")
-    #result = store.model_dump(mode="json")
-    #print(json.dumps(result, indent=2, ensure_ascii=False))
+    result = store.model_dumnp_aggregate_root(mode="json")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
     print("\n🎯 RESULTADO:")
     

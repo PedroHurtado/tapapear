@@ -1,0 +1,127 @@
+{
+  "id": {
+    "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49"
+  },
+  "name": "TechStore Madrid",
+  "location": {
+    "latitude": 40.4168,
+    "longitude": -3.7038
+  },
+  "products": [
+    {
+      "id": {
+        "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49/products/971edf0f-0a66-4a8a-b737-0a26b1e9f91e"
+      },
+      "name": "Gaming Laptop",
+      "price": 1299.99,
+      "category": {
+        "path": "categories/75387725-ce47-4bf5-b69f-5aac6acb989e"
+      },
+      "tags": [
+        {
+          "id": {
+            "path": "tags/eec645a1-d065-4cef-bac7-fc7a78b6f180"
+          },
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": {
+            "path": "tags/b283bb4d-3db1-4f81-9929-67eebf6dc1fb"
+          },
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.4168,
+        "longitude": -3.7038
+      },
+      "status": "active"
+    },
+    {
+      "id": {
+        "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49/products/c2932af6-e28b-4852-985d-1124c42d527e"
+      },
+      "name": "Wireless Mouse",
+      "price": 25.5,
+      "category": {
+        "path": "categories/75387725-ce47-4bf5-b69f-5aac6acb989e"
+      },
+      "tags": [
+        {
+          "id": {
+            "path": "tags/31358ef4-053a-4471-95b0-68c8a3438b3a"
+          },
+          "name": "Sale",
+          "color": "red"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.42,
+        "longitude": -3.68
+      },
+      "status": "active"
+    },
+    {
+      "id": {
+        "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49/products/b77ce04b-2edd-4207-b9e6-859b7290524a"
+      },
+      "name": "Python Guide",
+      "price": 45.0,
+      "category": {
+        "path": "categories/456004b4-e44f-4cc1-b1b2-71a365b2dc02"
+      },
+      "tags": [
+        {
+          "id": {
+            "path": "tags/eec645a1-d065-4cef-bac7-fc7a78b6f180"
+          },
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": {
+            "path": "tags/b283bb4d-3db1-4f81-9929-67eebf6dc1fb"
+          },
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": {
+        "latitude": 41.3851,
+        "longitude": 2.1734
+      },
+      "status": "inactive"
+    }
+  ],
+  "categories": [
+    {
+      "id": {
+        "path": "categories/75387725-ce47-4bf5-b69f-5aac6acb989e"
+      },
+      "name": {
+        "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49/categories/Electronics"
+      },
+      "description": "Electronic devices"
+    },
+    {
+      "id": {
+        "path": "categories/456004b4-e44f-4cc1-b1b2-71a365b2dc02"
+      },
+      "name": {
+        "path": "stores/b95e2226-0b89-420b-968f-58de659b7e49/categories/Books"      
+      },
+      "description": "Reading materials"
+    }
+  ],
+  "region": "madrid",
+  "phone_numbers": [
+    "+34 91 123 4567",
+    "+34 91 765 4321"
+  ],
+  "operating_hours": [
+    9,
+    21
+  ]
+}

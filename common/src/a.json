@@ -6,12 +6,13 @@
         "strategy": "id_field"
       },
       "name": {
-        "type": "primitive",
-        "strategy": "direct"
+        "type": "primitive",  
+        "strategy": "direct"  
       },
       "location": {
         "type": "geopoint",
-        "strategy": "geopoint_value"
+        "strategy": "geopoint_value",
+        "diff_strategy": "by_object_equality"
       },
       "products": {
         "type": "collection",
@@ -50,7 +51,14 @@
       "type": "document",
       "entity_name": "Store",
       "id_field": "id",
-      "collection_name": "stores"
+      "collection_name": "stores",
+      "dependencies": {
+        "documents": [
+          "Category",
+          "Product"
+        ],
+        "embeddables": []
+      }
     }
   },
   "Product": {
@@ -83,7 +91,8 @@
       },
       "coordinates": {
         "type": "geopoint",
-        "strategy": "geopoint_value"
+        "strategy": "geopoint_value",
+        "diff_strategy": "by_object_equality"
       },
       "status": {
         "type": "enum",
@@ -94,7 +103,13 @@
       "type": "document",
       "entity_name": "Product",
       "id_field": "id",
-      "collection_name": "products"
+      "collection_name": "products",
+      "dependencies": {
+        "documents": [
+          "Category"
+        ],
+        "embeddables": []
+      }
     }
   },
   "Category": {

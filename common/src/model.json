@@ -1,0 +1,101 @@
+{
+  "id": "eef2a5e5-6831-4f6e-8ba2-30c5e03edf9c",
+  "name": "TechStore Madrid",
+  "location": {
+    "latitude": 40.4168,
+    "longitude": -3.7038
+  },
+  "products": [
+    {
+      "id": "e4ea3f8e-816c-4649-9908-84481218b912",
+      "name": "Gaming Laptop",
+      "price": 1299.99,
+      "category": {
+        "path": "categories/ebbf56ce-6858-40dd-b05d-7888c0b0f746"
+      },
+      "tags": [
+        {
+          "id": "37887640-ae6c-45de-9e78-beb00d6be0df",
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": "545ac99c-6934-4229-8072-265be069a2f4",
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": [
+        40.4168,
+        -3.7038
+      ],
+      "status": "active"
+    },
+    {
+      "id": "f4cb8014-b920-4648-88e4-d29a8698b417",
+      "name": "Wireless Mouse",
+      "price": 25.5,
+      "category": {
+        "path": "categories/ebbf56ce-6858-40dd-b05d-7888c0b0f746"
+      },
+      "tags": [
+        {
+          "id": "8b4c80e8-9e7d-4404-b251-5116e1f4f6ec",
+          "name": "Sale",
+          "color": "red"
+        }
+      ],
+      "coordinates": [
+        40.42,
+        -3.68
+      ],
+      "status": "active"
+    },
+    {
+      "id": "5bc1397b-55d4-4079-91f1-d48afe8e3128",
+      "name": "Python Guide",
+      "price": 45.0,
+      "category": {
+        "path": "categories/98627efd-5b9c-4164-865b-cab875c437ce"
+      },
+      "tags": [
+        {
+          "id": "37887640-ae6c-45de-9e78-beb00d6be0df",
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": "545ac99c-6934-4229-8072-265be069a2f4",
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": {
+        "latitude": 41.3851,
+        "longitude": 2.1734
+      },
+      "status": "inactive"
+    }
+  ],
+  "categories": [
+    {
+      "id": "ebbf56ce-6858-40dd-b05d-7888c0b0f746",
+      "name": "Electronics",
+      "description": "Electronic devices"
+    },
+    {
+      "id": "98627efd-5b9c-4164-865b-cab875c437ce",
+      "name": "Books",
+      "description": "Reading materials"
+    }
+  ],
+  "region": "madrid",
+  "phone_numbers": [
+    "+34 91 123 4567",
+    "+34 91 765 4321"
+  ],
+  "operating_hours": [
+    9,
+    21
+  ]
+}

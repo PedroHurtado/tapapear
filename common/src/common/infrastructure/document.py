@@ -21,7 +21,6 @@ from pydantic import (
     model_serializer,
     SerializerFunctionWrapHandler,
     SerializationInfo,
-    
 )
 from pydantic.fields import FieldInfo
 from pydantic_core.core_schema import FieldValidationInfo
@@ -57,7 +56,7 @@ class BaseReference(BaseModel):
     """Clase base para todas las referencias con serialización común"""
 
     path: str
-    model_config = ConfigDict(frozen=True, extra='forbid')
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     @model_serializer(mode="wrap")
     def _serialize_model(
@@ -115,39 +114,59 @@ class MixinSerializer(BaseModel):
     Solo para Document y Embeddable classes.
     """
 
-    def _serialize_value(self,value):
-        if isinstance(value, BaseModel):        
-            return value.model_dump(mode="json")
-        elif isinstance(value, (list,set,tuple)):
-            return [self._serialize_value(i) for i in value]
-        else:
-            return value
+    # En MixinSerializer
+    def model_dumnp_aggregate_root(self, mode: str = "python") -> Dict[str, Any]:
+        """
+        Serializa usando el schema de la entidad root con @entity decorator.
 
-    """
-    @model_serializer(mode="wrap")
-    def _serialize_model(
-        self, serializer: SerializerFunctionWrapHandler, info: SerializationInfo
-    ):
-        
-        data = {}
-        for k in self.__class__.model_fields:
-            value = getattr(self, k)
-            data[k] = self._serialize_value(value)
-        return data
-    """
+        Args:
+            mode: Modo de serialización ('json' por defecto)
+
+        Returns:
+            Dict serializado usando estrategias del schema
+
+        Raises:
+            ValueError: Si la clase no tiene @entity decorator
+        """
+        # Validar que tiene @entity decorator
+        if not hasattr(self.__class__, "__document_schema__"):
+            raise ValueError(
+                f"Class {self.__class__.__name__} debe usar @entity decorator "
+                f"para usar model_dump_entity(). Use model_dump() normal para objetos sin decorator."
+            )
+
+        # Obtener schema y pasarlo via context
+        schema = self.__class__.__document_schema__
+        context = {"schema": schema}
+
+        # Delegar a model_dump con context
+        return self.model_dump(mode=mode, context=context)
+
     @field_serializer("*")
     def _serialize(self, value: Any, info: FieldSerializationInfo) -> Any:
         """Serialización basada en schema strategies"""
-        # Preservar None explícitos        
-        print(f"Serializando {info.field_name}:")
 
+        class_name = self.__class__.__name__
+        print(f"{class_name}->{info.field_name}")
+        # Preservar None explícitos
         if value is None:
             return None
+
+        if isinstance(value, (list, set, tuple)) and info.context:
+            # Para cada item en la colección, pasar el context
+            return [
+                (
+                    item.model_dump(context=info.context)
+                    if isinstance(item, BaseModel)
+                    else item
+                )
+                for item in value
+            ]
 
         field_name = info.field_name
 
         # Solo usar schema si es root document con @entity
-        field_schema = self._get_field_schema(field_name)
+        field_schema = self._get_field_schema(field_name, info.context)
         if not field_schema:
             return self._serialize_normal_field(value)
 
@@ -168,20 +187,23 @@ class MixinSerializer(BaseModel):
             case "direct" | _:
                 return self._serialize_normal_field(value)
 
-    def _get_field_schema(self, field_name: str) -> Dict[str, Any]:
-        """Obtiene schema del campo desde @entity decorator"""
-        # Solo funciona si tiene __document_schema__ (root document con @entity)
-        if not hasattr(self.__class__, "__document_schema__"):
+    def _get_field_schema(
+        self, field_name: str, context: dict = None
+    ) -> Dict[str, Any]:
+        """Obtiene schema del campo desde context del @aggregate_root"""
+
+        # Solo buscar en el context
+        if not context or "schema" not in context:
             return {}
 
-        schema = self.__class__.__document_schema__
+        parent_schema = context["schema"]
         entity_name = self.__class__.__name__
 
-        # Verificar estructura del schema
-        if entity_name not in schema:
+        # Buscar mi entidad en el schema del aggregate root
+        if entity_name not in parent_schema:
             return {}
 
-        entity_schema = schema[entity_name]
+        entity_schema = parent_schema[entity_name]
         if "properties" not in entity_schema:
             return {}
 
@@ -204,20 +226,22 @@ class MixinSerializer(BaseModel):
     def _serialize_id_field(
         self, value: Any, info: FieldSerializationInfo
     ) -> Union[DocumentId, CollectionReference, str]:
-        """Serializa campos ID según contexto"""
-        document_path = info.context.get("document_path") if info.context else None
+        """Serializa campos ID según schema del aggregate root"""
+        schema = info.context["schema"]
+        class_name = self.__class__.__name__
 
-        if document_path:
-            # Subcollection → CollectionReference
-            return CollectionReference(path=document_path)
-        elif info.context is None and self._is_root_document():
-            # Root document → DocumentId con collection/uuid
-            entity_metadata = self._get_entity_metadata()
-            collection_name = entity_metadata.get("collection_name", "unknown")
-            return DocumentId(path=f"{collection_name}/{str(value)}")
-        else:
-            # Objeto anidado → String directo
+        if not info.context or not schema or class_name not in schema:
             return str(value)
+
+        entity_metadata = schema[class_name].get("entity_metadata", {})
+
+        if entity_metadata.get("type") == "document" and entity_metadata.get(
+            "collection_name"
+        ):
+            collection_name = entity_metadata["collection_name"]
+            return DocumentId(path=f"{collection_name}/{str(value)}")
+
+        return str(value)
 
     def _serialize_geopoint(self, value: Any) -> Optional[GeoPointValue]:
         """Serializa geopoint según diferentes formatos"""
@@ -441,4 +465,4 @@ class Document(MixinSerializer):
 
 
 class Embeddable(MixinSerializer):
-    model_config = ConfigDict(frozen=True, extra='forbid')
+    model_config = ConfigDict(frozen=True, extra="forbid")

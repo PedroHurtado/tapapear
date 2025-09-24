@@ -3,7 +3,7 @@ from functools import wraps
 from pydantic import BaseModel
 
 
-def entity(cls):
+def agregate_root(cls):
     """
     Decorador que genera esquema flat optimizado para entidades root.
     
