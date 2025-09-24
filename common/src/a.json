@@ -16,21 +16,21 @@
       "products": {
         "type": "collection",
         "strategy": "collection_with_paths",
+        "diff_strategy": "by_object_equality",
         "collection_metadata": {
           "element_entity": "Product",
           "path_pattern": "stores/{Store.id}/products/{Product.id}",
-          "reference_field": "id",
-          "diff_strategy": "by_id"
+          "reference_field": "id"
         }
       },
       "categories": {
         "type": "collection",
         "strategy": "collection_with_paths",
+        "diff_strategy": "by_object_equality",
         "collection_metadata": {
           "element_entity": "Category",
           "path_pattern": "stores/{Store.id}/categories/{Category.name}",
-          "reference_field": "name",
-          "diff_strategy": "by_id"
+          "reference_field": "name"
         }
       },
       "region": {
@@ -39,33 +39,18 @@
       },
       "phone_numbers": {
         "type": "simple_array",
-        "strategy": "direct_array",
-        "array_metadata": {
-          "element_type": "str",
-          "diff_strategy": "array_operations"
-        }
+        "strategy": "direct"
       },
       "operating_hours": {
         "type": "tuple",
-        "strategy": "direct",
-        "array_metadata": {
-          "element_type": "mixed",
-          "diff_strategy": "direct_comparison"
-        }
+        "strategy": "direct"
       }
     },
     "entity_metadata": {
       "type": "document",
       "entity_name": "Store",
       "id_field": "id",
-      "collection_name": "stores",
-      "dependencies": {
-        "documents": [
-          "Category",
-          "Product"
-        ],
-        "embeddables": []
-      }
+      "collection_name": "stores"
     }
   },
   "Product": {
@@ -85,6 +70,7 @@
       "category": {
         "type": "reference",
         "strategy": "reference_path",
+        "diff_strategy": "by_object_equality",
         "reference_metadata": {
           "target_entity": "Category",
           "path_resolver": "categories/{Category.id}"
@@ -92,11 +78,8 @@
       },
       "tags": {
         "type": "set",
-        "strategy": "direct_array",
-        "array_metadata": {
-          "element_type": "Tag",
-          "diff_strategy": "by_id"
-        }
+        "strategy": "direct",
+        "diff_strategy": "by_object_equality"
       },
       "coordinates": {
         "type": "geopoint",
@@ -111,14 +94,7 @@
       "type": "document",
       "entity_name": "Product",
       "id_field": "id",
-      "collection_name": "products",
-      "dependencies": {
-        "documents": [
-          "Category",
-          "Tag"
-        ],
-        "embeddables": []
-      }
+      "collection_name": "products"
     }
   },
   "Category": {

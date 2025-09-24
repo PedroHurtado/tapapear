@@ -57,7 +57,7 @@ class BaseReference(BaseModel):
     """Clase base para todas las referencias con serialización común"""
 
     path: str
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra='forbid')
 
     @model_serializer(mode="wrap")
     def _serialize_model(
@@ -138,7 +138,7 @@ class MixinSerializer(BaseModel):
     @field_serializer("*")
     def _serialize(self, value: Any, info: FieldSerializationInfo) -> Any:
         """Serialización basada en schema strategies"""
-        # Preservar None explícitos
+        # Preservar None explícitos        
         print(f"Serializando {info.field_name}:")
 
         if value is None:
@@ -441,4 +441,4 @@ class Document(MixinSerializer):
 
 
 class Embeddable(MixinSerializer):
-    pass
+    model_config = ConfigDict(frozen=True, extra='forbid')
