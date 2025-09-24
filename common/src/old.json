@@ -1,0 +1,168 @@
+{
+  "Store": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",  
+        "strategy": "direct"  
+      },
+      "location": {
+        "type": "geopoint",
+        "strategy": "geopoint_value"
+      },
+      "products": {
+        "type": "collection",
+        "strategy": "collection_with_paths",
+        "collection_metadata": {
+          "element_entity": "Product",
+          "path_pattern": "stores/{Store.id}/products/{Product.id}",
+          "reference_field": "id",
+          "diff_strategy": "by_id"
+        }
+      },
+      "categories": {
+        "type": "collection",
+        "strategy": "collection_with_paths",
+        "collection_metadata": {
+          "element_entity": "Category",
+          "path_pattern": "stores/{Store.id}/categories/{Category.name}",
+          "reference_field": "name",
+          "diff_strategy": "by_id"
+        }
+      },
+      "region": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "phone_numbers": {
+        "type": "simple_array",
+        "strategy": "direct_array",
+        "array_metadata": {
+          "element_type": "str",
+          "diff_strategy": "array_operations"
+        }
+      },
+      "operating_hours": {
+        "type": "tuple",
+        "strategy": "direct",
+        "array_metadata": {
+          "element_type": "mixed",
+          "diff_strategy": "direct_comparison"
+        }
+      }
+    },
+    "entity_metadata": {
+      "type": "document",
+      "entity_name": "Store",
+      "id_field": "id",
+      "collection_name": "stores",
+      "dependencies": {
+        "documents": [
+          "Category",
+          "Product"
+        ],
+        "embeddables": []
+      }
+    }
+  },
+  "Product": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "price": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "category": {
+        "type": "reference",
+        "strategy": "reference_path",
+        "reference_metadata": {
+          "target_entity": "Category",
+          "path_resolver": "categories/{Category.id}"
+        }
+      },
+      "tags": {
+        "type": "set",
+        "strategy": "direct_array",
+        "array_metadata": {
+          "element_type": "Tag",
+          "diff_strategy": "by_id"
+        }
+      },
+      "coordinates": {
+        "type": "geopoint",
+        "strategy": "geopoint_value"
+      },
+      "status": {
+        "type": "enum",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "type": "document",
+      "entity_name": "Product",
+      "id_field": "id",
+      "collection_name": "products",
+      "dependencies": {
+        "documents": [
+          "Category",
+          "Tag"
+        ],
+        "embeddables": []
+      }
+    }
+  },
+  "Category": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "description": {
+        "type": "primitive",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "type": "document",
+      "entity_name": "Category",
+      "id_field": "id",
+      "collection_name": "categories"
+    }
+  },
+  "Tag": {
+    "properties": {
+      "id": {
+        "type": "id",
+        "strategy": "id_field"
+      },
+      "name": {
+        "type": "primitive",
+        "strategy": "direct"
+      },
+      "color": {
+        "type": "primitive",
+        "strategy": "direct"
+      }
+    },
+    "entity_metadata": {
+      "type": "document",
+      "entity_name": "Tag",
+      "id_field": "id",
+      "collection_name": "tags"
+    }
+  }
+}
