@@ -137,7 +137,7 @@ class MixinSerializer(BaseModel):
 
         # Obtener schema y pasarlo via context
         schema = self.__class__.__document_schema__
-        context = {"schema": schema}
+        context = {"schema": schema,"source_fields":{}}
 
         # Delegar a model_dump con context
         return self.model_dump(mode=mode, context=context)
@@ -145,6 +145,9 @@ class MixinSerializer(BaseModel):
     @field_serializer("*")
     def _serialize(self, value: Any, info: FieldSerializationInfo) -> Any:
         """Serialización basada en schema strategies"""
+
+        # TODO: remove de la source_fields el source
+        # por source-class igual a class.name
 
         class_name = self.__class__.__name__
         print(f"{class_name}->{info.field_name}")
@@ -154,6 +157,22 @@ class MixinSerializer(BaseModel):
 
         if isinstance(value, (list, set, tuple)) and info.context:
             # Para cada item en la colección, pasar el context
+            # crear un source_fiels con el field_schema
+            # calcular la ruta hasta donde yo sea propietario
+            """
+            {
+            'source-class':'Products',
+            'target_class': Tag,
+            'metadata':{
+                    "type": "reference",
+                    "strategy": "reference_path",
+                    "diff_strategy": "by_object_equality",
+                    "reference_metadata": {
+                    "target_entity": "Category",
+                    "path_resolver": "categories/{Category.id}"
+                    }
+            }            
+            """
             return [
                 (
                     item.model_dump(context=info.context)
