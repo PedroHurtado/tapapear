@@ -1,5 +1,6 @@
-from automapper import mapper, Mapper
-from automapper import Mapper as _Mapper, mapper
+from automapper import  mapper
+from automapper.mapper import Mapper as _Mapper
+
 from typing import NewType
 from common.ioc import component, ProviderType
 
