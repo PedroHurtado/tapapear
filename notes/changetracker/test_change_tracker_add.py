@@ -36,7 +36,7 @@ class MockDialect(DatabaseDialect):
     ) -> List[AbstractCommand]:
         """Ordena por level (mayor a menor para CREATE)"""
         if change_type == ChangeType.ADDED:
-            return sorted(commands, key=lambda c: c.level)
+            return sorted(commands, key=lambda c: c.level, reverse=True)
         return commands
 
 
@@ -122,36 +122,20 @@ def test_create_with_none_values():
     # Setup tracker
     dialect = MockDialect()
     tracker = ChangeTracker(dialect=dialect)
-    
+
     # Track como ADDED
     tracker.set_entity(store, ChangeType.ADDED)
 
-    print(f"Collection metadata: {tracker._collection_metadata}")
-    if hasattr(store.__class__, '__document_schema__'):
-        schema = store.__class__.__document_schema__
-        print(f"Schema keys: {schema.keys()}")
-        if 'Store' in schema:
-            print(f"Store properties: {list(schema['Store'].get('properties', {}).keys())}")
-            products_field = schema['Store'].get('properties', {}).get('products', {})
-            print(f"Products field schema: {products_field}")
-    
     # Guardar cambios
     tracker.save_changes()
-    import json
+
     # Validar comandos generados
     commands = dialect.executed_commands
-    
-    with open('commands_output.json', 'w', encoding='utf-8') as f:
-        json.dump(
-            [cmd.model_dump(mode="python") for cmd in dialect.executed_commands],
-            f,
-            indent=2,
-            default=str,
-            ensure_ascii=False
-        )
+
+    print(f"\n📦 Comandos generados: {len(commands)}")
 
     # Verificar que hay 4 comandos (Store, Product, Category, Tag)
-    assert len(commands) == 3, f"Expected 3 commands, got {len(commands)}"
+    assert len(commands) == 4, f"Expected 4 commands, got {len(commands)}"
 
     # Analizar cada comando
     for cmd in commands:
@@ -360,7 +344,6 @@ def test_command_order():
         price=999.99,
         category=electronics,
         status=Status.ACTIVE,
-        coordinates=None
     )
 
     store = Store(
@@ -385,8 +368,8 @@ def test_command_order():
 
     # Verificar que está ordenado descendente
     assert levels == sorted(
-        levels
-    ), "Comandos deben estar ordenados por level (ASC)"
+        levels, reverse=True
+    ), "Comandos deben estar ordenados por level (DESC)"
 
     # Level 0 debe ser Store
     assert "stores" in commands[-1].entity_id.path, "Último comando debe ser Store (level 0)"
