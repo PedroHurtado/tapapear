@@ -1,12 +1,11 @@
 [
   {
     "operation": "OperationType.CREATE",
-    "entity_id": "path='stores/1fe7f6bb-d793-4dd6-bb25-9cedb8cf8716'",
+    "entity_id": "path='stores/dc6eeda7-20b3-427f-b2e4-4484a5a721a4'",
     "data": {
       "name": "TechStore",
       "location": "latitude=40.4168 longitude=-3.7038",
-      "region": "Madrid",
-      "phone_numbers": []
+      "region": "Madrid"
     },
     "deleted_fields": null,
     "array_operations": null,
@@ -14,16 +13,16 @@
   },
   {
     "operation": "OperationType.CREATE",
-    "entity_id": "path='stores/1fe7f6bb-d793-4dd6-bb25-9cedb8cf8716/products/05d7ac62-cd29-4bad-bbce-351966ea723a'",
+    "entity_id": "path='stores/dc6eeda7-20b3-427f-b2e4-4484a5a721a4/products/34598655-31ee-45b7-a7d7-2df0947e61be'",
     "data": {
       "name": "Gaming Laptop",
       "price": 1299.99,
       "category": {
-        "path": "categories/dfc2382a-dbc2-4c8e-a7e4-3b1d5a368eaa"
+        "path": "categories/6dd2e510-875f-41c6-84c2-2a520ec310bc"
       },
       "tags": [
         {
-          "id": "36b11d19-d16e-4ccc-af13-203ceb41dd45",
+          "id": "9bd8af5b-1095-4c09-a17d-9bc03efdd981",
           "name": "Premium"
         }
       ],
@@ -35,7 +34,7 @@
   },
   {
     "operation": "OperationType.CREATE",
-    "entity_id": "path='stores/1fe7f6bb-d793-4dd6-bb25-9cedb8cf8716/categories/dfc2382a-dbc2-4c8e-a7e4-3b1d5a368eaa'",
+    "entity_id": "path='stores/dc6eeda7-20b3-427f-b2e4-4484a5a721a4/categories/6dd2e510-875f-41c6-84c2-2a520ec310bc'",
     "data": {
       "name": "Electronics"
     },

@@ -77,14 +77,14 @@ class DatabaseDialect(ABC):
 
     @abstractmethod
     def execute_commands(self, commands: List[AbstractCommand]) -> None:
-        """Ejecuta los comandos abstractos en la base de datos especÃ­fica"""
+        """Ejecuta los comandos abstractos en la base de datos específica"""
         pass
 
     @abstractmethod
     def sort_commands(
         self, commands: List[AbstractCommand], change_type: ChangeType
     ) -> List[AbstractCommand]:
-        """Ordena los comandos segÃºn las reglas especÃ­ficas de la base de datos"""
+        """Ordena los comandos según las reglas específicas de la base de datos"""
         pass
 
 
@@ -135,7 +135,7 @@ class ChangeTracker:
             # Primera vez que se trackea - crear snapshot
             original_snapshot = self._create_snapshot(document)
 
-            # âœ… NUEVA LÃNEA: Extraer metadata recursivamente
+            # ✅ NUEVA LÍNEA: Extraer metadata recursivamente
             collection_metadata = self._get_metadata_collection(document)
             self._collection_metadata.update(collection_metadata)
 
@@ -149,11 +149,11 @@ class ChangeTracker:
             self._tracked_entities[document.id] = entity_data
 
         else:
-            # Ya existe - validar transiciÃ³n y actualizar estado
+            # Ya existe - validar transición y actualizar estado
             tracked = self._tracked_entities[document.id]
 
             if not self._is_valid_transition(tracked.state, state):
-                raise ValueError(f"Invalid state transition: {tracked.state} â†’ {state}")
+                raise ValueError(f"Invalid state transition: {tracked.state} → {state}")
 
             # Crear nueva instancia frozen con estado actualizado
             updated_entity = tracked.model_copy(update={"state": state})
@@ -185,7 +185,7 @@ class ChangeTracker:
                     # No hacer nada
                     continue
 
-            # Delegar el ordenamiento al dialect especÃ­fico
+            # Delegar el ordenamiento al dialect específico
             if entity_commands:
                 sorted_commands = self.dialect.sort_commands(
                     entity_commands, tracked_entity.state
@@ -281,7 +281,7 @@ class ChangeTracker:
             commands.extend(
                 self._generate_nested_list_commands(
                     changes["lists_changed"],
-                    tracked_entity.current_document.id,  # âœ… Pasar DocumentId directamente
+                    tracked_entity.current_document.id,  # ✅ Pasar DocumentId directamente
                 )
             )
 
@@ -294,7 +294,7 @@ class ChangeTracker:
         commands = []
 
         for list_path, changes in lists_changes.items():
-            # Items aÃ±adidos - generar CREATE recursivo
+            # Items añadidos - generar CREATE recursivo
             for added_item in changes.get("added", []):
                 entity_id, _ = self._extract_entity_id_and_data(added_item)
                 if entity_id:
@@ -386,13 +386,16 @@ class ChangeTracker:
                 continue
 
             if self._is_collection_field(field_name, field_value, entity_type):
-                # Es collection â†’ guardar para procesar recursivamente
+                # Es collection → guardar para procesar recursivamente
                 collections_to_process.append((field_name, field_value))
             else:
-                # No es collection â†’ incluir en command data
+                # No es collection → incluir en command data
+                # Filtrar arrays vacíos (listas, sets, tuples vacías)
+                if isinstance(field_value, (list, set, tuple)) and len(field_value) == 0:
+                    continue  # Excluir arrays vacíos
                 final_command_data[field_name] = field_value
 
-        # 4. Crear comando (vacÃ­o para DELETE)
+        # 4. Crear comando (vacío para DELETE)
         command_data = final_command_data if operation != OperationType.DELETE else {}
         command = AbstractCommand(
             operation=operation, entity_id=entity_id, data=command_data, level=level
@@ -459,7 +462,7 @@ class ChangeTracker:
             ]
         else:
             # Para objetos como DocumentId, CollectionReference, GeoPointValue, etc.
-            # NO procesar recursivamente, devolver tal como estÃ¡n
+            # NO procesar recursivamente, devolver tal como están
             return data
 
     def _compare_special_types(self, orig: Any, curr: Any) -> bool:
@@ -482,7 +485,7 @@ class ChangeTracker:
         if isinstance(orig, GeoPointValue) and isinstance(curr, GeoPointValue):
             return orig.latitude == curr.latitude and orig.longitude == curr.longitude
 
-        # ComparaciÃ³n normal
+        # Comparación normal
         return orig == curr
 
     def _detect_array_operations(
@@ -526,7 +529,7 @@ class ChangeTracker:
         return array_operations if array_operations else None
 
     def _build_array_operation(self, added: List, removed: List) -> Dict:
-        """Construye operaciÃ³n UNION/REMOVE/UNION_REMOVE segÃºn cambios"""
+        """Construye operación UNION/REMOVE/UNION_REMOVE según cambios"""
 
         if added and removed:
             return {
@@ -542,10 +545,10 @@ class ChangeTracker:
             # Caso raro - SET completo
             return {
                 "operation": ArrayOperation.SET,
-                "items": added,  # En este caso serÃ­a el array completo
+                "items": added,  # En este caso sería el array completo
             }
 
-    # ==================== MÃ‰TODOS MODIFICADOS ====================
+    # ==================== MÉTODOS MODIFICADOS ====================
 
     def _is_collection_field(
         self, field_name: str, field_value: Any, entity_type: str = None
@@ -554,11 +557,11 @@ class ChangeTracker:
         if entity_type and entity_type in self._collection_metadata:
             return field_name in self._collection_metadata[entity_type]
 
-        # Fallback al mÃ©todo anterior si no hay metadata
+        # Fallback al método anterior si no hay metadata
         if not isinstance(field_value, list):
             return False
 
-        # Si la lista estÃ¡ vacÃ­a, asumir que no es collection
+        # Si la lista está vacía, asumir que no es collection
         if not field_value:
             return False
 
@@ -585,14 +588,14 @@ class ChangeTracker:
                 continue
 
             # INCLUIR TODO - DocumentReference, GeoPointValue, etc.
-            # El dialecto decidirÃ¡ quÃ© hacer con cada tipo
+            # El dialecto decidirá qué hacer con cada tipo
             filtered_data[key] = value
 
         return filtered_data
 
     def _diff(self, original, current, path="root"):
         """
-        Compara dos estructuras y devuelve cambios incluyendo detecciÃ³n de campos eliminados:
+        Compara dos estructuras y devuelve cambios incluyendo detección de campos eliminados:
             {
                 "fields_changed": {...},
                 "fields_deleted": [...],  # NUEVO
@@ -652,7 +655,7 @@ class ChangeTracker:
                     new_path = f"{path}.{key}" if path != "root" else key
 
                     if key not in orig:
-                        # Campo aÃ±adido
+                        # Campo añadido
                         if curr[key] is not None:
                             fields_changed[new_path] = {
                                 "old_value": None,
@@ -664,7 +667,7 @@ class ChangeTracker:
                     else:
                         # Campo existe en ambos
                         if orig[key] is not None and curr[key] is None:
-                            # Valor â†’ None = DELETE
+                            # Valor → None = DELETE
                             fields_deleted.append(new_path)
                         elif not self._compare_special_types(orig[key], curr[key]):
                             # Comparar recursivamente para estructuras complejas
@@ -681,7 +684,7 @@ class ChangeTracker:
 
             # List
             if isinstance(orig, list):
-                # Verificar si es una lista vacÃ­a
+                # Verificar si es una lista vacía
                 if not orig and not curr:
                     return {
                         "fields_changed": {},
@@ -719,7 +722,7 @@ class ChangeTracker:
                     removed = []
                     modified = []
 
-                    # Elementos aÃ±adidos
+                    # Elementos añadidos
                     for item_id in curr_by_id.keys() - orig_by_id.keys():
                         added.append(curr_by_id[item_id])
 
@@ -746,12 +749,12 @@ class ChangeTracker:
                         ):
                             modified.append({"id": item_id, "changes": sub_result})
 
-                        # TambiÃ©n propagar los cambios de campos individuales
+                        # También propagar los cambios de campos individuales
                         fields_changed.update(sub_result["fields_changed"])
                         fields_deleted.extend(sub_result["fields_deleted"])
                         lists_changed.update(sub_result["lists_changed"])
 
-                    # Agregar informaciÃ³n de la lista si hay cambios estructurales
+                    # Agregar información de la lista si hay cambios estructurales
                     result = {
                         "fields_changed": fields_changed,
                         "fields_deleted": fields_deleted,
@@ -767,7 +770,7 @@ class ChangeTracker:
 
                     return result
                 else:
-                    # Lista simple (sin IDs) - comparaciÃ³n directa
+                    # Lista simple (sin IDs) - comparación directa
                     if not self._compare_special_types(orig, curr):
                         return {
                             "fields_changed": {
@@ -782,7 +785,7 @@ class ChangeTracker:
                         "lists_changed": {},
                     }
 
-        # Ejecutar la comparaciÃ³n
+        # Ejecutar la comparación
         result = _compare(original, current, "root")
         return result
 
@@ -793,12 +796,12 @@ class ChangeTracker:
     def _is_valid_transition(
         self, current_state: ChangeType, new_state: ChangeType
     ) -> bool:
-        """Valida si una transiciÃ³n de estado es permitida"""
+        """Valida si una transición de estado es permitida"""
         valid_transitions = {
             ChangeType.UNCHANGED: [ChangeType.MODIFIED, ChangeType.DELETED],
-            ChangeType.MODIFIED: [],  # No puede cambiar a ningÃºn estado
-            ChangeType.ADDED: [],  # No puede cambiar a ningÃºn estado
-            ChangeType.DELETED: [],  # No puede cambiar a ningÃºn estado
+            ChangeType.MODIFIED: [],  # No puede cambiar a ningún estado
+            ChangeType.ADDED: [],  # No puede cambiar a ningún estado
+            ChangeType.DELETED: [],  # No puede cambiar a ningún estado
         }
         return new_state in valid_transitions.get(current_state, [])
 
@@ -810,6 +813,6 @@ class ChangeTracker:
         return snapshot
 
     def clear(self) -> None:
-        """Limpia el tracking (al cerrar transacciÃ³n)"""
+        """Limpia el tracking (al cerrar transacción)"""
         self._tracked_entities.clear()
         self._collection_metadata.clear()
