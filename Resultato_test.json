@@ -1,0 +1,113 @@
+{
+  "id": {
+    "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112"
+  },
+  "name": "TechStore Madrid",
+  "location": {
+    "latitude": 40.4168,
+    "longitude": -3.7038
+  },
+  "products": [
+    {
+      "id": {
+        "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112/products/370907a9-90bc-4de4-933a-46db4e892021"
+      },
+      "name": "Gaming Laptop",
+      "price": 1299.99,
+      "category": {
+        "path": "categories/d379037e-eae3-448d-bda1-ea08191e8085"
+      },
+      "tags": [
+        {
+          "id": "4de48eb2-1214-4b27-ace0-17c05444ec81",
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": "ea978a7e-50c9-43e2-b6f4-c9ce5fe7c94e",
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.4168,
+        "longitude": -3.7038
+      },
+      "status": "active"
+    },
+    {
+      "id": {
+        "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112/products/31a9184d-c761-4804-b1fd-03f2389d7f0c"
+      },
+      "name": "Wireless Mouse",
+      "price": 25.5,
+      "category": {
+        "path": "categories/d379037e-eae3-448d-bda1-ea08191e8085"
+      },
+      "tags": [
+        {
+          "id": "aac24c8a-b28d-4f53-b4ac-5cad5e04a75c",
+          "name": "Sale",
+          "color": "red"
+        }
+      ],
+      "coordinates": {
+        "latitude": 40.42,
+        "longitude": -3.68
+      },
+      "status": "active"
+    },
+    {
+      "id": {
+        "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112/products/a9d3b578-400c-4b92-a09f-3c3ce172226b"
+      },
+      "name": "Python Guide",
+      "price": 45.0,
+      "category": {
+        "path": "categories/d97ffdef-404e-4238-905d-6b500ded8a30"
+      },
+      "tags": [
+        {
+          "id": "4de48eb2-1214-4b27-ace0-17c05444ec81",
+          "name": "New",
+          "color": "blue"
+        },
+        {
+          "id": "ea978a7e-50c9-43e2-b6f4-c9ce5fe7c94e",
+          "name": "Premium",
+          "color": "gold"
+        }
+      ],
+      "coordinates": {
+        "latitude": 41.3851,
+        "longitude": 2.1734
+      },
+      "status": "inactive"
+    }
+  ],
+  "categories": [
+    {
+      "id": "d379037e-eae3-448d-bda1-ea08191e8085",
+      "name": {
+        "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112/categories/Electronics"
+      },
+      "description": "Electronic devices"
+    },
+    {
+      "id": "d97ffdef-404e-4238-905d-6b500ded8a30",
+      "name": {
+        "path": "stores/ba7b4a72-6d5f-4cbb-80a1-9a977369e112/categories/Books"
+      },
+      "description": "Reading materials"
+    }
+  ],
+  "region": "madrid",
+  "phone_numbers": [
+    "+34 91 123 4567",
+    "+34 91 765 4321"
+  ],
+  "operating_hours": [
+    9,
+    21
+  ]
+}

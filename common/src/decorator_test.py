@@ -1,14 +1,8 @@
 from enum import Enum
 from common.infrastructure import Document, reference, geopoint, collection
 from typing import Set, List, Tuple, Union
-from common.infrastructure.document_schema_generator import (
-    DocumentSchemaGenerator,
-    generate_flat_schema,
-)
 
 from common.infrastructure.agregate_root import agregate_root
-
-from pydantic.json_schema import GenerateJsonSchema
 
 import json
 
@@ -45,10 +39,5 @@ class Store(Document):
     region: str
     phone_numbers: List[str] = []  # Lista simple
     operating_hours: Tuple[int, int] = (9, 18)  # Tuple simple
-
-
-#result = Store.model_json_schema(schema_generator=DocumentSchemaGenerator)
-
-#result = generate_flat_schema(Store)
 
 print(json.dumps(Store.__document_schema__,indent=2))
