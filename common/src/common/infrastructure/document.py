@@ -149,11 +149,18 @@ class MixinSerializer(BaseModel):
         # TODO: remove de la source_fields el source
         # por source-class igual a class.name
 
-        class_name = self.__class__.__name__
-        print(f"{class_name}->{info.field_name}")
+       
         # Preservar None explícitos
         if value is None:
             return None
+        
+        field_name = info.field_name
+
+        field_schema = self._get_field_schema(field_name, info.context)
+        if not field_schema:
+            return self._serialize_normal_field(value)
+        strategy = field_schema.get("strategy", "direct")
+
 
         if isinstance(value, (list, set, tuple)) and info.context:
             # Para cada item en la colección, pasar el context
@@ -182,16 +189,7 @@ class MixinSerializer(BaseModel):
                 for item in value
             ]
 
-        field_name = info.field_name
-
-        # Solo usar schema si es root document con @entity
-        field_schema = self._get_field_schema(field_name, info.context)
-        if not field_schema:
-            return self._serialize_normal_field(value)
-
-        # Serializar según strategy del schema
-        strategy = field_schema.get("strategy", "direct")
-
+        
         match strategy:
             case "id_field":
                 return self._serialize_id_field(value, info)
@@ -389,8 +387,7 @@ class MixinSerializer(BaseModel):
             else:
                 return match.group(0)  # No reemplazar si no encontramos
 
-        resolved = placeholder_pattern.sub(replace_placeholder, resolved)
-
+        resolved = placeholder_pattern.sub(replace_placeholder, resolved)        
         return resolved
 
     # ==================== HELPER METHODS ====================
